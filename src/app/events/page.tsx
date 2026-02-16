@@ -1,8 +1,206 @@
-export default function TrainingPage() {
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import styles from "../../components/ui/ui.module.css";
+
+type EventRow = {
+  id: string;
+  title: string;
+  start_dt?: string | null;
+  end_dt?: string | null;
+  location_text?: string | null;
+  description?: string | null;
+  status?: string | null;     // scheduled|completed|cancelled|archived
+  visibility?: string | null; // members|public
+  is_test?: boolean | null;
+};
+
+function fmtDate(v?: string | null) {
+  if (!v) return "";
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleString();
+}
+
+function badgeClass(status: string, stylesMod: any) {
+  const st = (status || "scheduled").toLowerCase();
+  if (st === "scheduled") return stylesMod.badgeOpen;
+  if (st === "completed") return stylesMod.badgeClosed;
+  if (st === "cancelled") return stylesMod.badgeCancelled;
+  if (st === "archived") return stylesMod.badgeArchived;
+  return stylesMod.badgeOpen;
+}
+
+export default function EventsPage() {
+  const [rows, setRows] = useState<EventRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const [form, setForm] = useState({
+    title: "",
+    location_text: "",
+    description: "",
+    visibility: "members",
+    is_test: false,
+  });
+
+  async function load() {
+    setLoading(true);
+    const res = await fetch("/api/events");
+    const json = await res.json().catch(() => ([]));
+    setRows(Array.isArray(json) ? json : (json?.data ?? []));
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+
+    const payload = {
+      title: form.title.trim(),
+      location_text: form.location_text ? form.location_text.trim() : null,
+      description: form.description ? form.description.trim() : null,
+      visibility: form.visibility,
+      is_test: form.is_test,
+    };
+
+    const res = await fetch("/api/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(j?.error ?? "Create event failed");
+      return;
+    }
+
+    setForm({ title: "", location_text: "", description: "", visibility: "members", is_test: false });
+    load();
+  }
+
+  const visible = useMemo(() => {
+    return rows.filter((r) => {
+      const st = (r.status ?? "scheduled").toLowerCase();
+      if (!showArchived && st === "archived") return false;
+      return true;
+    });
+  }, [rows, showArchived]);
+
+  async function hardDeleteIfTest(id: string) {
+    const ok = confirm("Hard delete this TEST event? (Only works for TEST)");
+    if (!ok) return;
+    const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert(j?.error ?? "Delete failed");
+      return;
+    }
+    load();
+  }
+
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1>Training</h1>
-      <p>Coming soon.</p>
+    <main className={styles.container}>
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <h1 className={styles.h1}>Events</h1>
+          <button type="button" className={styles.buttonSecondary} onClick={load}>
+            Refresh
+          </button>
+        </div>
+
+        <form onSubmit={create} className={styles.formGrid}>
+          <div className={styles.label}>Title</div>
+          <input
+            className={styles.input}
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+            placeholder="e.g., Fundraiser, Demo, Standby"
+          />
+
+          <div className={styles.label}>Location</div>
+          <input
+            className={styles.input}
+            value={form.location_text}
+            onChange={(e) => setForm({ ...form, location_text: e.target.value })}
+            placeholder="e.g., Park / Venue / Town"
+          />
+
+          <div className={styles.label}>Description</div>
+          <input
+            className={styles.input}
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            placeholder="Short description"
+          />
+
+          <div className={styles.label}>Visibility</div>
+          <select className={styles.select} value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })}>
+            <option value="members">Members</option>
+            <option value="public">Public</option>
+          </select>
+
+          <div className={styles.row} style={{ marginTop: 6 }}>
+            <button className={styles.button} type="submit" disabled={!form.title.trim()}>
+              Create Event
+            </button>
+
+            <label className={styles.row} style={{ gap: 8 }}>
+              <input type="checkbox" checked={form.is_test} onChange={(e) => setForm({ ...form, is_test: e.target.checked })} />
+              <span className={styles.muted}>TEST</span>
+            </label>
+
+            <label className={styles.row} style={{ gap: 8, marginLeft: "auto" }}>
+              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+              <span className={styles.muted}>Show archived</span>
+            </label>
+          </div>
+        </form>
+
+        <hr className={styles.hr} />
+
+        <div className={styles.row} style={{ justifyContent: "space-between" }}>
+          <h2 className={styles.h2}>Log</h2>
+          <span className={styles.muted}>{loading ? "Loading…" : `${visible.length} showing`}</span>
+        </div>
+
+        {loading ? (
+          <p className={styles.muted} style={{ marginTop: 10 }}>Loading…</p>
+        ) : visible.length === 0 ? (
+          <p className={styles.muted} style={{ marginTop: 10 }}>No events yet.</p>
+        ) : (
+          <ul className={styles.list} style={{ marginTop: 8 }}>
+            {visible.map((r) => {
+              const st = (r.status ?? "scheduled").toLowerCase();
+              return (
+                <li key={r.id} className={styles.listItem}>
+                  <div className={styles.row} style={{ justifyContent: "space-between" }}>
+                    <div className={styles.row}>
+                      <span className={`${styles.badge} ${badgeClass(st, styles)}`}>{st}</span>
+                      {r.is_test ? <span className={`${styles.badge} ${styles.badgeTest}`}>TEST</span> : null}
+                      <strong>{r.title}</strong>
+                      {r.start_dt ? <span className={styles.muted}>{fmtDate(r.start_dt)}</span> : null}
+                      {r.location_text ? <span className={styles.muted}>• {r.location_text}</span> : null}
+                    </div>
+
+                    {r.is_test ? (
+                      <button className={styles.buttonSecondary} type="button" onClick={() => hardDeleteIfTest(r.id)}>
+                        Hard delete (TEST)
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {r.description ? <div style={{ marginTop: 6, opacity: 0.92 }}>{r.description}</div> : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </main>
   );
 }

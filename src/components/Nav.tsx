@@ -12,7 +12,6 @@ const links = [
   { href: "/admin/courses", label: "Courses" },
 ];
 
-
 export default function Nav() {
   const pathname = usePathname();
 
@@ -23,23 +22,26 @@ export default function Nav() {
         gap: 10,
         flexWrap: "wrap",
         padding: "12px 16px",
-        borderBottom: "1px solid #ddd",
+        borderBottom: "1px solid #94a3b8",
+        background: "#e2e8f0",
         fontFamily: "system-ui",
       }}
     >
       {links.map((l) => {
         const active = pathname === l.href || pathname.startsWith(l.href + "/");
+
         return (
           <Link
             key={l.href}
             href={l.href}
             style={{
-              padding: "6px 10px",
+              padding: "6px 12px",
               borderRadius: 8,
               textDecoration: "none",
-              border: "1px solid #ddd",
-              background: active ? "#f2f2f2" : "transparent",
-              color: "inherit",
+              border: "1px solid #94a3b8",
+              background: active ? "#cbd5e1" : "#f8fafc",
+              color: "#1f2937",
+              fontWeight: active ? 600 : 400,
             }}
           >
             {l.label}
