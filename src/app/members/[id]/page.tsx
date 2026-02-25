@@ -297,6 +297,24 @@ export default function MemberDetailPage() {
       }
     }
 
+    // Also load requirements for any prerequisite positions so course checks work
+    const prereqUpdates: Record<string, ReqRow[]> = {};
+    for (const req of reqs ?? []) {
+      if (req.req_kind === "position" && req.required_position?.id) {
+        const prereqId = req.required_position.id;
+        if (!reqsByPosition[prereqId] && !prereqUpdates[prereqId]) {
+          const prereqRes = await fetch(`/api/positions/${prereqId}/requirements`);
+          const prereqJson = await prereqRes.json().catch(() => ({}));
+          if (prereqRes.ok) {
+            prereqUpdates[prereqId] = prereqJson?.data?.requirements ?? [];
+          }
+        }
+      }
+    }
+    if (Object.keys(prereqUpdates).length > 0) {
+      setReqsByPosition((prev) => ({ ...prev, ...prereqUpdates }));
+    }
+
     if (!signoffsByPosition[position_id] && member?.id) {
       const sRes = await fetch(
         `/api/member-task-signoffs?member_id=${member.id}&position_id=${position_id}`
@@ -406,8 +424,20 @@ export default function MemberDetailPage() {
         if (!hasIt) ok = false;
       }
       if (r.req_kind === "position") {
-        const prereq = r.required_position?.code;
-        if (prereq && !memberHasPositionCode.has(prereq)) ok = false;
+        const prereqId = r.required_position?.id;
+        if (prereqId) {
+          const prereqReqs = reqsByPosition[prereqId];
+          if (prereqReqs !== undefined) {
+            for (const pr of prereqReqs) {
+              if (pr.req_kind === "course") {
+                const code = pr.courses?.code;
+                const cid = pr.courses?.id;
+                const has = (code && completedCourseCodes.has(code)) || !!(cid && completedCourseIds.has(cid));
+                if (!has) ok = false;
+              }
+            }
+          }
+        }
       }
     }
 
@@ -734,12 +764,36 @@ export default function MemberDetailPage() {
                         }
 
                         if (r.req_kind === "position") {
-                          const prereq = r.required_position?.code ?? "(position)";
-                          const has = memberHasPositionCode.has(prereq);
+                          const prereqId = r.required_position?.id;
+                          const prereqCode = r.required_position?.code ?? "(position)";
+                          const prereqName = r.required_position?.name ?? "";
+                          const prereqReqs = prereqId ? (reqsByPosition[prereqId] ?? []) : [];
+                          const prereqCourseReqs = prereqReqs.filter((pr) => pr.req_kind === "course");
+                          const allMet = prereqCourseReqs.length > 0 && prereqCourseReqs.every((pr) => {
+                            const code = pr.courses?.code;
+                            const cid = pr.courses?.id;
+                            return (code && completedCourseCodes.has(code)) || !!(cid && completedCourseIds.has(cid));
+                          });
                           return (
-                            <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                              <span style={{ width: 18 }}>{has ? "✅" : "⬜"}</span>
-                              <span>Prereq position: <strong>{prereq}</strong></span>
+                            <div key={r.id}>
+                              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                                <span style={{ width: 18 }}>{allMet ? "✅" : "⬜"}</span>
+                                <span>Prereq: <strong>{prereqCode}</strong>{prereqName ? ` — ${prereqName}` : ""}</span>
+                              </div>
+                              {prereqCourseReqs.map((pr) => {
+                                const code = pr.courses?.code ?? "(course)";
+                                const cid = pr.courses?.id;
+                                const has = (code !== "(course)" && completedCourseCodes.has(code)) || !!(cid && completedCourseIds.has(cid));
+                                return (
+                                  <div key={pr.id} style={{ display: "flex", gap: 10, alignItems: "center", marginLeft: 28, fontSize: 13, opacity: 0.9 }}>
+                                    <span style={{ width: 18 }}>{has ? "✅" : "⬜"}</span>
+                                    <span><strong>{code}</strong>{pr.courses?.name ? ` — ${pr.courses.name}` : ""}</span>
+                                  </div>
+                                );
+                              })}
+                              {prereqId && !reqsByPosition[prereqId] ? (
+                                <div style={{ marginLeft: 28, fontSize: 12, opacity: 0.6 }}>Loading prereq requirements…</div>
+                              ) : null}
                             </div>
                           );
                         }

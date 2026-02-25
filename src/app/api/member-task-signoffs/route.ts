@@ -36,25 +36,7 @@ async function checkPositionRequirements(member_id: string, position_id: string)
   if (certErr) throw new Error(certErr.message);
   const haveCourse = new Set((certs ?? []).map((c: any) => c.course_id));
 
-  // Member awarded/approved positions
-  const { data: mpos, error: posErr } = await supabaseDb
-    .from("member_positions")
-    .select("position_id, status, approved_at, awarded_at")
-    .eq("member_id", member_id);
-
-  if (posErr) throw new Error(posErr.message);
-
-  const havePos = new Set(
-    (mpos ?? [])
-      .filter((p: any) => {
-        const st = String(p.status ?? "").toLowerCase();
-        return !!p.approved_at || !!p.awarded_at || (st && st !== "trainee");
-      })
-      .map((p: any) => p.position_id)
-  );
-
   const missing_courses: string[] = [];
-  const missing_positions: string[] = [];
 
   for (const r of reqs ?? []) {
     const kind = String((r as any).req_kind ?? "").toLowerCase();
@@ -68,18 +50,32 @@ async function checkPositionRequirements(member_id: string, position_id: string)
     }
 
     if (kind === "position") {
-      const pid = (r as any).required_position_id;
-      if (pid && !havePos.has(pid)) {
-        const p = (r as any).positions;
-        missing_positions.push(p?.code ? String(p.code) : String(pid));
+      // Check courses required by the prerequisite position instead of checking approval status
+      const prereq_position_id = (r as any).required_position_id;
+      if (prereq_position_id) {
+        const { data: prereqReqs, error: prereqErr } = await supabaseDb
+          .from("position_requirements")
+          .select("req_kind, course_id, courses:course_id ( id, code, name )")
+          .eq("position_id", prereq_position_id)
+          .eq("req_kind", "course");
+
+        if (prereqErr) throw new Error(prereqErr.message);
+
+        for (const pr of prereqReqs ?? []) {
+          const cid = (pr as any).course_id;
+          if (cid && !haveCourse.has(cid)) {
+            const c = (pr as any).courses;
+            missing_courses.push(c?.code ? String(c.code) : String(cid));
+          }
+        }
       }
     }
   }
 
   return {
-    ok: missing_courses.length === 0 && missing_positions.length === 0,
+    ok: missing_courses.length === 0,
     missing_courses,
-    missing_positions,
+    missing_positions: [],
   };
 }
 
