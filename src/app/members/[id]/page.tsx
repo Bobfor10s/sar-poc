@@ -137,6 +137,11 @@ export default function MemberDetailPage() {
     return set;
   }, [history]);
 
+  // Use course_id directly (no join required) for reliable completion checks
+  const completedCourseIds = useMemo(() => {
+    return new Set(history.map((r) => r.course_id).filter(Boolean));
+  }, [history]);
+
   const memberHasPositionCode = useMemo(() => {
     const set = new Set<string>();
     for (const mp of memberPositions) {
@@ -336,7 +341,6 @@ export default function MemberDetailPage() {
     }
   }
 
-  // ✅ NEW: Unassign (delete the assignment row)
   async function unassignMemberPosition(memberPositionId: string, position_id: string) {
     if (!memberPositionId) return;
 
@@ -359,7 +363,7 @@ export default function MemberDetailPage() {
         return;
       }
 
-      // Clean up cached UI state for that position so it doesn't “ghost” in the UI
+      // Clean up cached UI state for that position so it doesn't "ghost" in the UI
       setReqsByPosition((prev) => {
         const next = { ...prev };
         delete next[position_id];
@@ -395,7 +399,11 @@ export default function MemberDetailPage() {
     for (const r of reqs) {
       if (r.req_kind === "course") {
         const code = r.courses?.code;
-        if (code && !completedCourseCodes.has(code)) ok = false;
+        const reqCourseId = r.courses?.id;
+        const hasIt =
+          (code && completedCourseCodes.has(code)) ||
+          !!(reqCourseId && completedCourseIds.has(reqCourseId));
+        if (!hasIt) ok = false;
       }
       if (r.req_kind === "position") {
         const prereq = r.required_position?.code;
@@ -481,7 +489,7 @@ export default function MemberDetailPage() {
     try {
       const res = await fetch(`/api/member-positions`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json"},
         body: JSON.stringify({ id: mpId, approve: true, status: "qualified" }),
       });
 
@@ -676,7 +684,6 @@ export default function MemberDetailPage() {
                         Approve / Qualify
                       </button>
 
-                      {/* ✅ NEW: Unassign */}
                       <button
                         type="button"
                         onClick={() => unassignMemberPosition(mp.id, pid)}
@@ -708,13 +715,16 @@ export default function MemberDetailPage() {
 
                     <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
                       {reqs.length === 0 && tasks.length === 0 ? (
-                        <div style={{ opacity: 0.7 }}>No requirements loaded yet. Click “Refresh checklist”.</div>
+                        <div style={{ opacity: 0.7 }}>No requirements loaded yet. Click "Refresh checklist".</div>
                       ) : null}
 
                       {reqs.map((r) => {
                         if (r.req_kind === "course") {
                           const code = r.courses?.code ?? "(course)";
-                          const has = completedCourseCodes.has(code);
+                          const reqCourseId = r.courses?.id;
+                          const has =
+                            completedCourseCodes.has(code) ||
+                            !!(reqCourseId && completedCourseIds.has(reqCourseId));
                           return (
                             <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
                               <span style={{ width: 18 }}>{has ? "✅" : "⬜"}</span>

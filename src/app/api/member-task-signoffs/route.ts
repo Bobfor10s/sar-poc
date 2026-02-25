@@ -27,13 +27,11 @@ async function checkPositionRequirements(member_id: string, position_id: string)
 
   if (reqErr) throw new Error(reqErr.message);
 
-  // Member valid certs (expires_at >= today)
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // All certs (no expiry filter)
   const { data: certs, error: certErr } = await supabaseDb
     .from("member_certifications")
-    .select("course_id, expires_at")
-    .eq("member_id", member_id)
-    .gte("expires_at", today);
+    .select("course_id")
+    .eq("member_id", member_id);
 
   if (certErr) throw new Error(certErr.message);
   const haveCourse = new Set((certs ?? []).map((c: any) => c.course_id));
