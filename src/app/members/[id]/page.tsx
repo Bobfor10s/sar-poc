@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 
 type Member = {
   id: string;
@@ -34,6 +34,49 @@ type CertRow = {
   courses?: { code: string; name: string } | null;
 };
 
+type Position = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+type MemberPosition = {
+  id: string;
+  member_id: string;
+  position_id: string;
+  status: string; // trainee|qualified|pending etc.
+  approved_at?: string | null;
+  positions?: Position | null;
+};
+
+type ReqRow = {
+  id: string;
+  req_kind: "course" | "position" | string;
+  notes?: string | null;
+  courses?: { id: string; code: string; name: string } | null;
+  required_position?: { id: string; code: string; name: string } | null;
+};
+
+type TaskRow = {
+  id: string;
+  task_code: string;
+  task_name: string;
+  description?: string | null;
+  is_active: boolean;
+};
+
+type SignoffRow = {
+  id: string;
+  task_id: string;
+  signed_at: string;
+};
+
+type PtbErr = {
+  message: string;
+  missing_courses: string[];
+  missing_positions: string[];
+};
+
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
@@ -48,9 +91,13 @@ function addMonths(dateStr: string, months: number) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function isPtbCompleteTaskCode(code: string) {
+  const c = (code || "").toUpperCase().replace(/\s+/g, "-");
+  return c === "PTB-COMPLETE" || c === "PTB_COMPLETE" || c === "PTB-COMPLETED";
+}
+
 export default function MemberDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const memberId = typeof (params as any)?.id === "string" ? (params as any).id : "";
 
   const [member, setMember] = useState<Member | null>(null);
@@ -59,10 +106,9 @@ export default function MemberDetailPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
 
-  const [certForm, setCertForm] = useState({
-    course_id: "",
-    completed_at: "",
-  });
+  const [ptbErrorByPosition, setPtbErrorByPosition] = useState<Record<string, PtbErr | null>>({});
+
+  const [certForm, setCertForm] = useState({ course_id: "", completed_at: "" });
 
   const selectedCourse = useMemo(
     () => courses.find((c) => c.id === certForm.course_id) ?? null,
@@ -74,16 +120,44 @@ export default function MemberDetailPage() {
     return addMonths(certForm.completed_at, selectedCourse.valid_months);
   }, [selectedCourse, certForm.completed_at]);
 
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [memberPositions, setMemberPositions] = useState<MemberPosition[]>([]);
+  const [selectedPositionId, setSelectedPositionId] = useState("");
+
+  const [reqsByPosition, setReqsByPosition] = useState<Record<string, ReqRow[]>>({});
+  const [tasksByPosition, setTasksByPosition] = useState<Record<string, TaskRow[]>>({});
+  const [signoffsByPosition, setSignoffsByPosition] = useState<Record<string, SignoffRow[]>>({});
+
+  const completedCourseCodes = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of history) {
+      const code = r.courses?.code;
+      if (code) set.add(code);
+    }
+    return set;
+  }, [history]);
+
+  const memberHasPositionCode = useMemo(() => {
+    const set = new Set<string>();
+    for (const mp of memberPositions) {
+      const code = mp.positions?.code;
+      if (code) set.add(code);
+    }
+    return set;
+  }, [memberPositions]);
+
   async function loadAll() {
     if (!memberId || !isUuid(memberId)) {
       setMsg(`Bad member id: ${memberId || "(missing)"}`);
       return;
     }
 
-    const [mRes, cRes, hRes] = await Promise.all([
+    const [mRes, cRes, hRes, pRes, mpRes] = await Promise.all([
       fetch(`/api/members/${memberId}`),
       fetch(`/api/courses`),
       fetch(`/api/member-certifications?member_id=${memberId}&mode=history`),
+      fetch(`/api/positions`),
+      fetch(`/api/member-positions?member_id=${memberId}`),
     ]);
 
     const mJson = await mRes.json().catch(() => ({}));
@@ -91,42 +165,20 @@ export default function MemberDetailPage() {
 
     const cJson = await cRes.json().catch(() => ({}));
     const hJson = await hRes.json().catch(() => ({}));
+    const pJson = await pRes.json().catch(() => ({}));
+    const mpJson = await mpRes.json().catch(() => ({}));
 
     setMember(mJson.data);
     setCourses(cJson.data ?? []);
     setHistory(hJson.data ?? []);
+    setPositions(pJson.data ?? []);
+    setMemberPositions(mpJson.data ?? []);
   }
 
   useEffect(() => {
-    loadAll().catch((e) => setMsg(e.message ?? String(e)));
+    loadAll().catch((e) => setMsg(e?.message ?? String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberId]);
-
-async function deactivateMember() {
-  if (!member) return;
-  setBusy(true);
-  setMsg("");
-
-  try {
-    const res = await fetch(`/api/members/${member.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "inactive" }),
-    });
-
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setMsg(json?.error ?? "Deactivate failed");
-      return;
-    }
-
-    setMember(json.data);
-    setMsg("Member deactivated.");
-  } finally {
-    setBusy(false);
-  }
-}
-
 
   async function saveMember(e: React.FormEvent) {
     e.preventDefault();
@@ -154,67 +206,30 @@ async function deactivateMember() {
     }
   }
 
- async function deleteMember() {
-  if (!member) return;
+  async function deactivateMember() {
+    if (!member) return;
+    setBusy(true);
+    setMsg("");
 
-  const ok = confirm(
-    `Delete ${member.first_name} ${member.last_name}?\n\nThis is intended for test users with NO history.`
-  );
-  if (!ok) return;
+    try {
+      const res = await fetch(`/api/members/${member.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "inactive" }),
+      });
 
-  setBusy(true);
-  setMsg("");
-
-  try {
-    const res = await fetch(`/api/members/${member.id}`, { method: "DELETE" });
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      // If blocked due to history, offer force delete ONLY if API says it can
-      if (res.status === 409) {
-        const canForce = Boolean(json?.can_force);
-
-        const baseMsg =
-          json?.error ??
-          "Delete blocked because the member has history. Deactivate instead.";
-
-        if (!canForce) {
-          setMsg(baseMsg);
-          return;
-        }
-
-        const forceOk = confirm(
-          `${baseMsg}\n\nFORCE DELETE will remove ALL certifications and call attendance for this member, then delete them.\n\nUse only for TEST DATA.\n\nProceed?`
-        );
-        if (!forceOk) {
-          setMsg(baseMsg);
-          return;
-        }
-
-        const forceRes = await fetch(`/api/members/${member.id}?force=1`, {
-          method: "DELETE",
-        });
-        const forceJson = await forceRes.json().catch(() => ({}));
-
-        if (!forceRes.ok) {
-          setMsg(forceJson?.error ?? "Force delete failed");
-          return;
-        }
-
-        router.push("/members");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(json?.error ?? "Deactivate failed");
         return;
       }
 
-      setMsg(json?.error ?? "Delete failed");
-      return;
+      setMember(json.data);
+      setMsg("Member deactivated.");
+    } finally {
+      setBusy(false);
     }
-
-    router.push("/members");
-  } finally {
-    setBusy(false);
   }
-}
-
 
   async function addCertification(e: React.FormEvent) {
     e.preventDefault();
@@ -243,11 +258,241 @@ async function deactivateMember() {
 
       setCertForm({ course_id: "", completed_at: "" });
 
-      // reload history
       const hRes = await fetch(`/api/member-certifications?member_id=${member.id}&mode=history`);
       const hJson = await hRes.json().catch(() => ({}));
       setHistory(hJson.data ?? []);
       setMsg("Certification added.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // --------------------
+  // POSITIONS helpers
+  // --------------------
+  async function ensurePositionLoaded(position_id: string) {
+    if (!position_id) return { reqs: [] as ReqRow[], tasks: [] as TaskRow[] };
+
+    let reqs = reqsByPosition[position_id];
+    let tasks = tasksByPosition[position_id];
+
+    if (!reqs || !tasks) {
+      const res = await fetch(`/api/positions/${position_id}/requirements`);
+      const json = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        reqs = json?.data?.requirements ?? [];
+        tasks = json?.data?.tasks ?? [];
+
+        setReqsByPosition((prev) => ({ ...prev, [position_id]: reqs! }));
+        setTasksByPosition((prev) => ({ ...prev, [position_id]: tasks! }));
+      } else {
+        reqs = [];
+        tasks = [];
+      }
+    }
+
+    if (!signoffsByPosition[position_id] && member?.id) {
+      const sRes = await fetch(
+        `/api/member-task-signoffs?member_id=${member.id}&position_id=${position_id}`
+      );
+      const sJson = await sRes.json().catch(() => ({}));
+      if (sRes.ok) setSignoffsByPosition((prev) => ({ ...prev, [position_id]: sJson?.data ?? [] }));
+    }
+
+    return { reqs: (reqs ?? []) as ReqRow[], tasks: (tasks ?? []) as TaskRow[] };
+  }
+
+  async function refreshMemberPositions() {
+    if (!member?.id) return;
+    const mpRes = await fetch(`/api/member-positions?member_id=${member.id}`);
+    const mpJson = await mpRes.json().catch(() => ({}));
+    setMemberPositions(mpJson.data ?? []);
+  }
+
+  async function assignPosition() {
+    if (!member || !selectedPositionId) return;
+    setBusy(true);
+    setMsg("");
+
+    try {
+      const res = await fetch(`/api/member-positions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member_id: member.id, position_id: selectedPositionId, status: "trainee" }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(json?.error ?? "Assign failed");
+        return;
+      }
+
+      await refreshMemberPositions();
+      setSelectedPositionId("");
+      setMsg("Position assigned (trainee).");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ✅ NEW: Unassign (delete the assignment row)
+  async function unassignMemberPosition(memberPositionId: string, position_id: string) {
+    if (!memberPositionId) return;
+
+    const ok = confirm("Unassign this position from the member? This removes the assignment record.");
+    if (!ok) return;
+
+    setBusy(true);
+    setMsg("");
+
+    try {
+      const res = await fetch(`/api/member-positions`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: memberPositionId }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(json?.error ?? "Unassign failed");
+        return;
+      }
+
+      // Clean up cached UI state for that position so it doesn't “ghost” in the UI
+      setReqsByPosition((prev) => {
+        const next = { ...prev };
+        delete next[position_id];
+        return next;
+      });
+      setTasksByPosition((prev) => {
+        const next = { ...prev };
+        delete next[position_id];
+        return next;
+      });
+      setSignoffsByPosition((prev) => {
+        const next = { ...prev };
+        delete next[position_id];
+        return next;
+      });
+      setPtbErrorByPosition((prev) => {
+        const next = { ...prev };
+        delete next[position_id];
+        return next;
+      });
+
+      await refreshMemberPositions();
+      setMsg("Position unassigned.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function meetsRequirements(position_id: string) {
+    const reqs = reqsByPosition[position_id] ?? [];
+    let ok = true;
+
+    for (const r of reqs) {
+      if (r.req_kind === "course") {
+        const code = r.courses?.code;
+        if (code && !completedCourseCodes.has(code)) ok = false;
+      }
+      if (r.req_kind === "position") {
+        const prereq = r.required_position?.code;
+        if (prereq && !memberHasPositionCode.has(prereq)) ok = false;
+      }
+    }
+
+    const tasks = (tasksByPosition[position_id] ?? []).filter((t) => t.is_active);
+    const ptb = tasks.find((t) => isPtbCompleteTaskCode(t.task_code));
+    if (ptb) {
+      const signoffs = signoffsByPosition[position_id] ?? [];
+      const has = signoffs.some((s) => s.task_id === ptb.id);
+      if (!has) ok = false;
+    }
+
+    return ok;
+  }
+
+  async function signoffPTB(position_id: string) {
+    if (!member) return;
+
+    setPtbErrorByPosition((prev) => ({ ...prev, [position_id]: null }));
+
+    setBusy(true);
+    setMsg("");
+
+    try {
+      const bundle = await ensurePositionLoaded(position_id);
+      const tasks = (bundle.tasks ?? []).filter((t) => t.is_active);
+
+      const ptb = tasks.find((t) => isPtbCompleteTaskCode(t.task_code));
+      if (!ptb) {
+        setMsg("No PTB Complete task found for this position (check position_tasks).");
+        return;
+      }
+
+      const res = await fetch(`/api/member-task-signoffs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          member_id: member.id,
+          position_id,
+          task_id: ptb.id,
+          evaluator_name: "Admin",
+          evaluator_position: "Coordinator",
+          notes: "PTB complete",
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        const message = json?.error ?? "Signoff failed";
+        setMsg(message);
+
+        const missing_courses = Array.isArray(json?.missing_courses) ? json.missing_courses : [];
+        const missing_positions = Array.isArray(json?.missing_positions) ? json.missing_positions : [];
+
+        if (missing_courses.length || missing_positions.length) {
+          setPtbErrorByPosition((prev) => ({
+            ...prev,
+            [position_id]: { message, missing_courses, missing_positions },
+          }));
+        }
+        return;
+      }
+
+      const sRes = await fetch(
+        `/api/member-task-signoffs?member_id=${member.id}&position_id=${position_id}`
+      );
+      const sJson = await sRes.json().catch(() => ({}));
+      if (sRes.ok) setSignoffsByPosition((prev) => ({ ...prev, [position_id]: sJson?.data ?? [] }));
+
+      setMsg("PTB signed off.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveMemberPosition(mpId: string) {
+    setBusy(true);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/member-positions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: mpId, approve: true, status: "qualified" }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(json?.error ?? "Approve failed");
+        return;
+      }
+
+      await refreshMemberPositions();
+      setMsg("Position approved / marked qualified.");
     } finally {
       setBusy(false);
     }
@@ -258,7 +503,7 @@ async function deactivateMember() {
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 900 }}>
+    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 980 }}>
       <p>
         <a href="/members">← Back to Members</a>
       </p>
@@ -279,95 +524,41 @@ async function deactivateMember() {
 
           <form onSubmit={saveMember} style={{ display: "grid", gap: 10, marginTop: 12 }}>
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <input
-                value={member.first_name}
-                onChange={(e) => setMember({ ...member, first_name: e.target.value })}
-                placeholder="First name"
-              />
-              <input
-                value={member.last_name}
-                onChange={(e) => setMember({ ...member, last_name: e.target.value })}
-                placeholder="Last name"
-              />
+              <input value={member.first_name} onChange={(e) => setMember({ ...member, first_name: e.target.value })} placeholder="First name" />
+              <input value={member.last_name} onChange={(e) => setMember({ ...member, last_name: e.target.value })} placeholder="Last name" />
             </div>
 
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-              <input
-                value={member.email ?? ""}
-                onChange={(e) => setMember({ ...member, email: e.target.value })}
-                placeholder="Email"
-              />
-              <input
-                value={member.phone ?? ""}
-                onChange={(e) => setMember({ ...member, phone: e.target.value })}
-                placeholder="Phone"
-              />
+              <input value={member.email ?? ""} onChange={(e) => setMember({ ...member, email: e.target.value })} placeholder="Email" />
+              <input value={member.phone ?? ""} onChange={(e) => setMember({ ...member, phone: e.target.value })} placeholder="Phone" />
             </div>
 
             <div style={{ fontWeight: 600, marginTop: 6 }}>Address</div>
 
-            <input
-              value={member.street_address ?? ""}
-              onChange={(e) => setMember({ ...member, street_address: e.target.value })}
-              placeholder="Street address"
-            />
-            <input
-              value={member.street_address_2 ?? ""}
-              onChange={(e) => setMember({ ...member, street_address_2: e.target.value })}
-              placeholder="Apt / Unit (optional)"
-            />
+            <input value={member.street_address ?? ""} onChange={(e) => setMember({ ...member, street_address: e.target.value })} placeholder="Street address" />
+            <input value={member.street_address_2 ?? ""} onChange={(e) => setMember({ ...member, street_address_2: e.target.value })} placeholder="Apt / Unit (optional)" />
 
             <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1.2fr 0.6fr 0.8fr" }}>
-              <input
-                value={member.city ?? ""}
-                onChange={(e) => setMember({ ...member, city: e.target.value })}
-                placeholder="City"
-              />
-              <input
-                value={member.state ?? ""}
-                onChange={(e) => setMember({ ...member, state: e.target.value })}
-                placeholder="State"
-              />
-              <input
-                value={member.postal_code ?? ""}
-                onChange={(e) => setMember({ ...member, postal_code: e.target.value })}
-                placeholder="ZIP"
-              />
+              <input value={member.city ?? ""} onChange={(e) => setMember({ ...member, city: e.target.value })} placeholder="City" />
+              <input value={member.state ?? ""} onChange={(e) => setMember({ ...member, state: e.target.value })} placeholder="State" />
+              <input value={member.postal_code ?? ""} onChange={(e) => setMember({ ...member, postal_code: e.target.value })} placeholder="ZIP" />
             </div>
 
-<div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-  <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-    Status:
-    <select
-      value={member.status}
-      onChange={(e) => setMember({ ...member, status: e.target.value })}
-    >
-      <option value="active">active</option>
-      <option value="inactive">inactive</option>
-    </select>
-  </label>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                Status:
+                <select value={member.status} onChange={(e) => setMember({ ...member, status: e.target.value })}>
+                  <option value="active">active</option>
+                  <option value="inactive">inactive</option>
+                </select>
+              </label>
 
-  <button type="submit" disabled={busy}>
-    {busy ? "Saving…" : "Save"}
-  </button>
+              <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              <button type="button" onClick={deactivateMember} disabled={busy}>Deactivate</button>
+            </div>
+          </form>
 
-  <button type="button" onClick={deactivateMember} disabled={busy}>
-    Deactivate
-  </button>
-
-  <button
-    type="button"
-    onClick={deleteMember}
-    disabled={busy}
-    style={{ marginLeft: "auto" }}
-  >
-    Delete (test only)
-  </button>
-</div>
-</form>
-
-<hr style={{ margin: "24px 0" }} />
-
+          <hr style={{ margin: "24px 0" }} />
 
           <h2>Certifications</h2>
 
@@ -375,21 +566,13 @@ async function deactivateMember() {
             <label style={{ fontSize: 13, fontWeight: 600 }}>Course</label>
             <select value={certForm.course_id} onChange={(e) => setCertForm({ ...certForm, course_id: e.target.value })}>
               <option value="">Select course…</option>
-              {courses
-                .filter((c) => c.is_active)
-                .map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.code} — {c.name}
-                  </option>
-                ))}
+              {courses.filter((c) => c.is_active).map((c) => (
+                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+              ))}
             </select>
 
             <label style={{ fontSize: 13, fontWeight: 600 }}>Completion date</label>
-            <input
-              type="date"
-              value={certForm.completed_at}
-              onChange={(e) => setCertForm({ ...certForm, completed_at: e.target.value })}
-            />
+            <input type="date" value={certForm.completed_at} onChange={(e) => setCertForm({ ...certForm, completed_at: e.target.value })} />
 
             <div style={{ opacity: 0.85, fontSize: 13 }}>
               Expires: <strong>{computedExpires || "—"}</strong>
@@ -412,6 +595,164 @@ async function deactivateMember() {
                 </li>
               ))}
             </ul>
+          )}
+
+          <hr style={{ margin: "24px 0" }} />
+
+          <h2>Positions</h2>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={selectedPositionId}
+              onChange={async (e) => {
+                const pid = e.target.value;
+                setSelectedPositionId(pid);
+                if (pid) await ensurePositionLoaded(pid);
+              }}
+            >
+              <option value="">Assign position…</option>
+              {positions.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.code} — {p.name}
+                </option>
+              ))}
+            </select>
+
+            <button type="button" onClick={assignPosition} disabled={!selectedPositionId || busy}>
+              Assign (trainee)
+            </button>
+          </div>
+
+          {memberPositions.length === 0 ? (
+            <p style={{ opacity: 0.7, marginTop: 10 }}>No positions assigned yet.</p>
+          ) : (
+            <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+              {memberPositions.map((mp) => {
+                const pos = mp.positions;
+                const pid = mp.position_id;
+
+                const reqs = reqsByPosition[pid] ?? [];
+                const tasks = (tasksByPosition[pid] ?? []).filter((t) => t.is_active);
+                const ptb = tasks.find((t) => isPtbCompleteTaskCode(t.task_code));
+                const signoffs = signoffsByPosition[pid] ?? [];
+                const ptbDone = ptb ? signoffs.some((s) => s.task_id === ptb.id) : true;
+
+                const ok = meetsRequirements(pid);
+                const ptbErr = ptbErrorByPosition[pid];
+
+                return (
+                  <div key={mp.id} style={{ border: "1px solid #eee", borderRadius: 10, padding: 12 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      <strong>{pos?.code ?? pid}</strong>
+                      <span style={{ opacity: 0.85 }}>{pos?.name ?? ""}</span>
+
+                      <span style={{ marginLeft: "auto", fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>
+                        {mp.status}
+                      </span>
+
+                      <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999, background: ok ? "#f2fff2" : "#fff6f2" }}>
+                        {ok ? "Meets requirements" : "Missing items"}
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      <button type="button" onClick={() => ensurePositionLoaded(pid)} disabled={busy}>
+                        Refresh checklist
+                      </button>
+
+                      {ptb && !ptbDone ? (
+                        <button type="button" onClick={() => signoffPTB(pid)} disabled={busy} style={{ marginLeft: 8 }}>
+                          Mark PTB Complete
+                        </button>
+                      ) : null}
+
+                      <button
+                        type="button"
+                        onClick={() => approveMemberPosition(mp.id)}
+                        disabled={busy || !ok}
+                        style={{ marginLeft: 8 }}
+                        title={!ok ? "Must meet requirements first" : "Approve/qualify"}
+                      >
+                        Approve / Qualify
+                      </button>
+
+                      {/* ✅ NEW: Unassign */}
+                      <button
+                        type="button"
+                        onClick={() => unassignMemberPosition(mp.id, pid)}
+                        disabled={busy}
+                        style={{ marginLeft: 8, border: "1px solid #f2c9b8" }}
+                        title="Remove this position assignment from the member"
+                      >
+                        Unassign
+                      </button>
+                    </div>
+
+                    {ptbErr ? (
+                      <div style={{ marginTop: 10, padding: 10, border: "1px solid #f2c9b8", borderRadius: 8, background: "#fff6f2" }}>
+                        <div style={{ fontWeight: 700 }}>{ptbErr.message}</div>
+
+                        {ptbErr.missing_courses.length ? (
+                          <div style={{ marginTop: 6 }}>
+                            <strong>Missing courses:</strong> {ptbErr.missing_courses.join(", ")}
+                          </div>
+                        ) : null}
+
+                        {ptbErr.missing_positions.length ? (
+                          <div style={{ marginTop: 6 }}>
+                            <strong>Missing positions:</strong> {ptbErr.missing_positions.join(", ")}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div style={{ marginTop: 12, display: "grid", gap: 6 }}>
+                      {reqs.length === 0 && tasks.length === 0 ? (
+                        <div style={{ opacity: 0.7 }}>No requirements loaded yet. Click “Refresh checklist”.</div>
+                      ) : null}
+
+                      {reqs.map((r) => {
+                        if (r.req_kind === "course") {
+                          const code = r.courses?.code ?? "(course)";
+                          const has = completedCourseCodes.has(code);
+                          return (
+                            <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                              <span style={{ width: 18 }}>{has ? "✅" : "⬜"}</span>
+                              <span><strong>{code}</strong> — {r.courses?.name}</span>
+                            </div>
+                          );
+                        }
+
+                        if (r.req_kind === "position") {
+                          const prereq = r.required_position?.code ?? "(position)";
+                          const has = memberHasPositionCode.has(prereq);
+                          return (
+                            <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                              <span style={{ width: 18 }}>{has ? "✅" : "⬜"}</span>
+                              <span>Prereq position: <strong>{prereq}</strong></span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={r.id} style={{ display: "flex", gap: 10, alignItems: "center", opacity: 0.8 }}>
+                            <span style={{ width: 18 }}>•</span>
+                            <span>{r.req_kind}: {r.notes ?? ""}</span>
+                          </div>
+                        );
+                      })}
+
+                      {ptb ? (
+                        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                          <span style={{ width: 18 }}>{ptbDone ? "✅" : "⬜"}</span>
+                          <span><strong>{ptb.task_code}</strong> — {ptb.task_name}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </>
       ) : null}

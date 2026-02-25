@@ -16,13 +16,29 @@ export async function POST(req: Request) {
 
   const code = String(body.code ?? "").trim();
   const name = String(body.name ?? "").trim();
+  const never_expires = !!body.never_expires;
 
   if (!code || !name) {
     return NextResponse.json({ error: "code and name are required" }, { status: 400 });
   }
 
-  const valid_months = Number.isFinite(Number(body.valid_months)) ? Number(body.valid_months) : 24;
-  const warning_days = Number.isFinite(Number(body.warning_days)) ? Number(body.warning_days) : 30;
+  // If never expires is false, valid_months must be > 0
+  let valid_months = Number(body.valid_months);
+  let warning_days = Number(body.warning_days);
+
+  if (never_expires) {
+    // Keep sane values; will be ignored by logic/constraint anyway
+    if (!Number.isFinite(valid_months) || valid_months <= 0) valid_months = 24;
+    if (!Number.isFinite(warning_days) || warning_days < 0) warning_days = 0;
+    warning_days = 0; // warning doesn't make sense if never expires
+  } else {
+    if (!Number.isFinite(valid_months) || valid_months <= 0) {
+      return NextResponse.json({ error: "valid_months must be a positive number (or set never_expires=true)" }, { status: 400 });
+    }
+    if (!Number.isFinite(warning_days) || warning_days < 0) {
+      return NextResponse.json({ error: "warning_days must be 0 or more" }, { status: 400 });
+    }
+  }
 
   const payload = {
     code,
@@ -30,6 +46,7 @@ export async function POST(req: Request) {
     description: body.description ? String(body.description) : null,
     valid_months,
     warning_days,
+    never_expires,
     is_active: body.is_active === false ? false : true,
   };
 

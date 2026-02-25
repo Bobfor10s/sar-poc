@@ -25,6 +25,7 @@ export async function POST(req: Request) {
     // allow overrides, otherwise DB defaults handle start_dt/type/visibility
     start_dt: body.start_dt ? String(body.start_dt) : undefined,
     end_dt: body.end_dt ? String(body.end_dt) : null,
+    title: body.title ? String(body.title).trim() : null,
 
     type: type || undefined,
     location_text: body.location_text ? String(body.location_text).trim() : null,

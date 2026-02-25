@@ -131,17 +131,21 @@ export default function MeetingsPage() {
       return;
     }
 
-    setForm({
-      title: "",
-      location_text: "",
-      agenda: "",
-      notes: "",
-      visibility: "members",
-      is_test: false,
-      start_date: "",
-      start_time: "",
-      end_time: "",
-    });
+  setForm({
+  title: "",
+  location_text: "",
+  agenda: "",
+  notes: "",
+  visibility: "members",
+  is_test: false,
+
+  start_date: "",
+  start_hour: "19",
+  start_minute: "00",
+  end_hour: "",
+  end_minute: "",
+});
+
 
     load();
   }

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Link from "next/link";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","DC","FL","GA","HI","ID","IL","IN","IA",
@@ -44,7 +45,7 @@ export default function NewMemberPage() {
       }
 
       // members POST returns created row
-      router.push(`/members/${json.id}`);
+      router.push(`/members/${json?.data?.id}`);
     } finally {
       setBusy(false);
     }
@@ -52,6 +53,19 @@ export default function NewMemberPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 720 }}>
+      <Link
+  href="/members"
+  style={{
+    display: "inline-block",
+    marginBottom: 12,
+    textDecoration: "none",
+    padding: "6px 10px",
+    border: "1px solid #ddd",
+    borderRadius: 8,
+  }}
+>
+  ← Back to Members
+</Link>
       <h1>Add Member</h1>
 
       <form onSubmit={save} style={{ display: "grid", gap: 10 }}>
