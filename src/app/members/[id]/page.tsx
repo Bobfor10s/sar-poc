@@ -31,7 +31,7 @@ type CertRow = {
   course_id: string;
   completed_at: string;
   expires_at: string;
-  courses?: { code: string; name: string } | null;
+  courses?: { code: string; name: string; never_expires: boolean } | null;
 };
 
 type Position = {
@@ -129,8 +129,11 @@ export default function MemberDetailPage() {
   const [signoffsByPosition, setSignoffsByPosition] = useState<Record<string, SignoffRow[]>>({});
 
   const completedCourseCodes = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
     const set = new Set<string>();
     for (const r of history) {
+      const neverExpires = r.courses?.never_expires ?? false;
+      if (!neverExpires && r.expires_at && r.expires_at < today) continue;
       const code = r.courses?.code;
       if (code) set.add(code);
     }
@@ -139,7 +142,16 @@ export default function MemberDetailPage() {
 
   // Use course_id directly (no join required) for reliable completion checks
   const completedCourseIds = useMemo(() => {
-    return new Set(history.map((r) => r.course_id).filter(Boolean));
+    const today = new Date().toISOString().slice(0, 10);
+    return new Set(
+      history
+        .filter((r) => {
+          const neverExpires = r.courses?.never_expires ?? false;
+          return neverExpires || !r.expires_at || r.expires_at >= today;
+        })
+        .map((r) => r.course_id)
+        .filter(Boolean)
+    );
   }, [history]);
 
   const memberHasPositionCode = useMemo(() => {
@@ -178,6 +190,11 @@ export default function MemberDetailPage() {
     setHistory(hJson.data ?? []);
     setPositions(pJson.data ?? []);
     setMemberPositions(mpJson.data ?? []);
+
+    // Auto-load requirements for all assigned positions so badges are correct on load
+    for (const mp of (mpJson.data ?? [])) {
+      if (mp.position_id) await ensurePositionLoaded(mp.position_id);
+    }
   }
 
   useEffect(() => {
@@ -315,9 +332,9 @@ export default function MemberDetailPage() {
       setReqsByPosition((prev) => ({ ...prev, ...prereqUpdates }));
     }
 
-    if (!signoffsByPosition[position_id] && member?.id) {
+    if (!signoffsByPosition[position_id] && memberId) {
       const sRes = await fetch(
-        `/api/member-task-signoffs?member_id=${member.id}&position_id=${position_id}`
+        `/api/member-task-signoffs?member_id=${memberId}&position_id=${position_id}`
       );
       const sJson = await sRes.json().catch(() => ({}));
       if (sRes.ok) setSignoffsByPosition((prev) => ({ ...prev, [position_id]: sJson?.data ?? [] }));

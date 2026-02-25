@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   if (mode === "current") {
   const { data, error } = await supabaseDb
     .from("v_member_course_current")
-    .select("*, courses(code, name)")
+    .select("*, courses(code, name, never_expires)")
     .eq("member_id", member_id)
     .order("expires_at", { ascending: true });
 
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   // history mode
   const { data, error } = await supabaseDb
     .from("member_certifications")
-    .select("*, courses(code, name)")
+    .select("*, courses(code, name, never_expires)")
     .eq("member_id", member_id)
     .order("expires_at", { ascending: false })
     .order("completed_at", { ascending: false });

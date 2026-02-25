@@ -27,14 +27,22 @@ async function checkPositionRequirements(member_id: string, position_id: string)
 
   if (reqErr) throw new Error(reqErr.message);
 
-  // All certs (no expiry filter)
+  // Certs that are either non-expired or from a never_expires course
+  const today = new Date().toISOString().slice(0, 10);
   const { data: certs, error: certErr } = await supabaseDb
     .from("member_certifications")
-    .select("course_id")
+    .select("course_id, expires_at, courses:course_id(never_expires)")
     .eq("member_id", member_id);
 
   if (certErr) throw new Error(certErr.message);
-  const haveCourse = new Set((certs ?? []).map((c: any) => c.course_id));
+  const haveCourse = new Set(
+    (certs ?? [])
+      .filter((c: any) => {
+        const neverExpires = c.courses?.never_expires ?? false;
+        return neverExpires || !c.expires_at || c.expires_at >= today;
+      })
+      .map((c: any) => c.course_id)
+  );
 
   const missing_courses: string[] = [];
 
