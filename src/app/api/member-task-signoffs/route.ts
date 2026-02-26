@@ -91,13 +91,40 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const member_id = (url.searchParams.get("member_id") || "").trim();
   const position_id = (url.searchParams.get("position_id") || "").trim();
+  const training_session_id = (url.searchParams.get("training_session_id") || "").trim();
+  const call_id = (url.searchParams.get("call_id") || "").trim();
 
+  // Mode 1: by training_session_id — return all signoffs for a session
+  if (training_session_id) {
+    if (!isUuid(training_session_id)) return NextResponse.json({ error: "bad training_session_id" }, { status: 400 });
+    const { data, error } = await supabaseDb
+      .from("member_task_signoffs")
+      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, call_id, training_session_id")
+      .eq("training_session_id", training_session_id)
+      .order("signed_at", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data: data ?? [] });
+  }
+
+  // Mode 2: by call_id — return all signoffs for a call
+  if (call_id) {
+    if (!isUuid(call_id)) return NextResponse.json({ error: "bad call_id" }, { status: 400 });
+    const { data, error } = await supabaseDb
+      .from("member_task_signoffs")
+      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, call_id, training_session_id")
+      .eq("call_id", call_id)
+      .order("signed_at", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data: data ?? [] });
+  }
+
+  // Mode 3: by member_id + position_id (original behaviour)
   if (!member_id || !isUuid(member_id)) return NextResponse.json({ error: "bad member_id" }, { status: 400 });
   if (!position_id || !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
 
   const { data, error } = await supabaseDb
     .from("member_task_signoffs")
-    .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes")
+    .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, call_id, training_session_id")
     .eq("member_id", member_id)
     .eq("position_id", position_id)
     .order("signed_at", { ascending: false });
@@ -145,6 +172,12 @@ export async function POST(req: Request) {
     }
   }
 
+  const call_id = body.call_id ? String(body.call_id).trim() : null;
+  const training_session_id = body.training_session_id ? String(body.training_session_id).trim() : null;
+
+  if (call_id && !isUuid(call_id)) return NextResponse.json({ error: "bad call_id" }, { status: 400 });
+  if (training_session_id && !isUuid(training_session_id)) return NextResponse.json({ error: "bad training_session_id" }, { status: 400 });
+
   const payload = {
     member_id,
     position_id,
@@ -152,6 +185,8 @@ export async function POST(req: Request) {
     evaluator_name: body.evaluator_name ? String(body.evaluator_name) : null,
     evaluator_position: body.evaluator_position ? String(body.evaluator_position) : null,
     notes: body.notes ? String(body.notes) : null,
+    call_id,
+    training_session_id,
   };
 
   const { data: inserted, error: insErr } = await supabaseDb

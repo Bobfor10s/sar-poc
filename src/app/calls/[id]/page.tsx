@@ -48,6 +48,28 @@ type CallNote = {
   created_at: string;
 };
 
+type MemberPosition = {
+  id: string;
+  position_id: string;
+  positions?: { id: string; code: string; name: string } | null;
+};
+
+type TaskRow = {
+  id: string;
+  task_code: string;
+  task_name: string;
+};
+
+type SignoffRow = {
+  id: string;
+  member_id: string;
+  position_id: string;
+  task_id: string;
+  evaluator_name?: string | null;
+  signed_at: string;
+  call_id?: string | null;
+};
+
 function asArray<T>(json: any): T[] {
   if (Array.isArray(json)) return json as T[];
   return (json?.data ?? []) as T[];
@@ -92,11 +114,21 @@ export default function CallDetailPage() {
 
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [busy, setBusy] = useState<
-    "" | "save" | "addNote" | "add" | "arrive" | "clear" | "reload"
+    "" | "save" | "addNote" | "add" | "arrive" | "clear" | "reload" | "signoff"
   >("");
   const [err, setErr] = useState("");
 
   const [noteText, setNoteText] = useState("");
+
+  // ── Mission Competency state ──
+  const [compMemberId, setCompMemberId] = useState("");
+  const [compPositionId, setCompPositionId] = useState("");
+  const [compMemberPositions, setCompMemberPositions] = useState<MemberPosition[]>([]);
+  const [compTasks, setCompTasks] = useState<TaskRow[]>([]);
+  const [compSignoffs, setCompSignoffs] = useState<SignoffRow[]>([]); // signoffs for this call
+  const [compSelectedTaskIds, setCompSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [compEvaluator, setCompEvaluator] = useState("");
+  const [compNotes, setCompNotes] = useState("");
 
   const selectedAttendance = useMemo(() => {
     if (!selectedMemberId) return null;
@@ -127,11 +159,12 @@ export default function CallDetailPage() {
       setBusy("reload");
       setErr("");
 
-      const [callRes, membersRes, attRes, notesRes] = await Promise.all([
+      const [callRes, membersRes, attRes, notesRes, soRes] = await Promise.all([
         fetch(`/api/calls/${callId}`),
         fetch(`/api/members`),
         fetch(`/api/calls/${callId}/attendance`),
         fetch(`/api/calls/${callId}/notes`),
+        fetch(`/api/member-task-signoffs?call_id=${callId}`),
       ]);
 
       const callJson = await callRes.json().catch(() => ({}));
@@ -146,6 +179,9 @@ export default function CallDetailPage() {
 
       const notesJson = await notesRes.json().catch(() => ([]));
       setNotes(asArray<CallNote>(notesJson));
+
+      const soJson = await soRes.json().catch(() => ([]));
+      setCompSignoffs(asArray<SignoffRow>(soJson));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     } finally {
@@ -157,6 +193,55 @@ export default function CallDetailPage() {
     loadAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callId]);
+
+  // Load member's positions when competency member changes
+  useEffect(() => {
+    setCompPositionId("");
+    setCompTasks([]);
+    setCompSelectedTaskIds(new Set());
+    if (!compMemberId || !isUuid(compMemberId)) { setCompMemberPositions([]); return; }
+    fetch(`/api/member-positions?member_id=${compMemberId}`)
+      .then((r) => r.json())
+      .then((j) => setCompMemberPositions(asArray<MemberPosition>(j)))
+      .catch(() => setCompMemberPositions([]));
+  }, [compMemberId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load tasks when competency position changes
+  useEffect(() => {
+    setCompTasks([]);
+    setCompSelectedTaskIds(new Set());
+    if (!compPositionId || !isUuid(compPositionId)) return;
+    fetch(`/api/positions/${compPositionId}/requirements`)
+      .then((r) => r.json())
+      .then((j) => setCompTasks(j?.data?.tasks ?? []))
+      .catch(() => setCompTasks([]));
+  }, [compPositionId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function signOffMissionTask(taskId: string) {
+    if (!compMemberId || !compPositionId) return;
+    setBusy("signoff");
+    try {
+      const res = await fetch("/api/member-task-signoffs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          member_id: compMemberId,
+          position_id: compPositionId,
+          task_id: taskId,
+          call_id: callId,
+          evaluator_name: compEvaluator || null,
+          notes: compNotes || null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Sign-off failed");
+      setCompSignoffs((prev) => [json.data, ...prev]);
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
 
   async function saveCall() {
     if (!call) return;
@@ -508,6 +593,130 @@ export default function CallDetailPage() {
                 </li>
               ))}
             </ul>
+          </section>
+
+          {/* ── Mission Competency Sign-offs ── */}
+          <section style={{ marginTop: 16, padding: 14, border: "1px solid #e5e5e5", borderRadius: 10 }}>
+            <h2 style={{ marginTop: 0 }}>Mission Competency Sign-offs</h2>
+            <p style={{ fontSize: 12, opacity: 0.65, marginTop: 0 }}>
+              Record task sign-offs observed during this mission. Select a member on this call, their position, and the tasks demonstrated.
+            </p>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Member</div>
+                <select
+                  value={compMemberId}
+                  onChange={(e) => setCompMemberId(e.target.value)}
+                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                >
+                  <option value="">Select member…</option>
+                  {attendance.map((a) => (
+                    <option key={a.member_id} value={a.member_id}>{memberName(a.member_id)}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Position</div>
+                <select
+                  value={compPositionId}
+                  onChange={(e) => setCompPositionId(e.target.value)}
+                  disabled={!compMemberId}
+                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                >
+                  <option value="">Select position…</option>
+                  {compMemberPositions.map((mp) => (
+                    <option key={mp.position_id} value={mp.position_id}>
+                      {(mp.positions as any)?.code} — {(mp.positions as any)?.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Evaluator name</div>
+                <input
+                  value={compEvaluator}
+                  onChange={(e) => setCompEvaluator(e.target.value)}
+                  placeholder="Optional"
+                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                />
+              </div>
+
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Notes</div>
+                <input
+                  value={compNotes}
+                  onChange={(e) => setCompNotes(e.target.value)}
+                  placeholder="Optional"
+                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                />
+              </div>
+            </div>
+
+            {compPositionId && compTasks.length > 0 ? (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, opacity: 0.8 }}>Tasks</div>
+                <ul style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
+                  {compTasks.map((t) => {
+                    const signed = compSignoffs.some(
+                      (s) => s.member_id === compMemberId && s.task_id === t.id
+                    );
+                    return (
+                      <li key={t.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: 13 }}>
+                          {signed ? (
+                            <span style={{ color: "#1a7f3c", marginRight: 6 }}>✓</span>
+                          ) : (
+                            <span style={{ marginRight: 6, opacity: 0.3 }}>○</span>
+                          )}
+                          <strong>{t.task_code}</strong>
+                          <span style={{ opacity: 0.65, marginLeft: 6 }}>{t.task_name}</span>
+                        </div>
+                        {!signed ? (
+                          <button
+                            type="button"
+                            onClick={() => signOffMissionTask(t.id)}
+                            disabled={busy !== ""}
+                            style={{ fontSize: 12, padding: "3px 10px", cursor: "pointer", borderRadius: 6, border: "1px solid #ddd" }}
+                          >
+                            {busy === "signoff" ? "…" : "Sign Off"}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: 11, opacity: 0.5 }}>
+                            {(() => {
+                              const s = compSignoffs.find((s) => s.member_id === compMemberId && s.task_id === t.id);
+                              return s ? `${s.evaluator_name ?? "Signed"} · ${new Date(s.signed_at).toLocaleDateString()}` : "Signed";
+                            })()}
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : compPositionId ? (
+              <p style={{ fontSize: 12, opacity: 0.65, marginTop: 10 }}>No tasks defined for this position.</p>
+            ) : null}
+
+            {compSignoffs.length > 0 ? (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7, marginBottom: 6 }}>
+                  All sign-offs on this call ({compSignoffs.length})
+                </div>
+                <ul style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
+                  {compSignoffs.map((s) => (
+                    <li key={s.id} style={{ fontSize: 12, padding: "4px 0", borderBottom: "1px solid #f5f5f5", opacity: 0.85 }}>
+                      <strong>{memberName(s.member_id)}</strong>
+                      <span style={{ opacity: 0.65, marginLeft: 6 }}>task {s.task_id.slice(0, 8)}…</span>
+                      {s.evaluator_name ? <span style={{ opacity: 0.65 }}> · {s.evaluator_name}</span> : null}
+                      <span style={{ opacity: 0.5, marginLeft: 6 }}>{new Date(s.signed_at).toLocaleString()}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </section>
         </>
       ) : null}
