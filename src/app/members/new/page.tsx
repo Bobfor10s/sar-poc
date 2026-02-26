@@ -25,7 +25,7 @@ export default function NewMemberPage() {
     state: "NJ",
     postal_code: "",
     status: "active",
-    joined_at: new Date().toISOString().slice(0, 10),
+    joined_at: "",
   });
 
   async function save(e: React.FormEvent) {
@@ -131,7 +131,10 @@ export default function NewMemberPage() {
 
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
           <div>
-            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Town Approval Date</div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>
+              Town Approval Date{" "}
+              <span style={{ fontWeight: 400, opacity: 0.6 }}>(leave blank to add as applicant)</span>
+            </div>
             <input
               type="date"
               style={{ width: "100%", padding: 8 }}

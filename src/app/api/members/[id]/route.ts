@@ -44,11 +44,24 @@ export async function PATCH(req: Request, ctx: Ctx) {
     "state",
     "postal_code",
     "status",
+    "joined_at",
   ];
 
   const patch: Record<string, any> = {};
   for (const f of fields) {
     if (body[f] !== undefined) patch[f] = body[f] === "" ? null : body[f];
+  }
+
+  // Detect first-time town approval (joined_at transitioning from null to a date)
+  const approvingNow = patch.joined_at != null;
+  let wasApplicant = false;
+  if (approvingNow) {
+    const { data: current } = await supabaseDb
+      .from("members")
+      .select("joined_at")
+      .eq("id", id)
+      .single();
+    wasApplicant = current?.joined_at == null;
   }
 
   const { data, error } = await supabaseDb
@@ -59,6 +72,35 @@ export async function PATCH(req: Request, ctx: Ctx) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Auto-assign SEARCHER when approving an applicant for the first time
+  if (wasApplicant && patch.joined_at) {
+    const { data: searcherPos } = await supabaseDb
+      .from("positions")
+      .select("id")
+      .eq("code", "SEARCHER")
+      .single();
+
+    if (searcherPos) {
+      // Only insert if not already assigned
+      const { data: existing } = await supabaseDb
+        .from("member_positions")
+        .select("id")
+        .eq("member_id", id)
+        .eq("position_id", searcherPos.id)
+        .maybeSingle();
+
+      if (!existing) {
+        await supabaseDb.from("member_positions").insert({
+          member_id: id,
+          position_id: searcherPos.id,
+          status: "qualified",
+          approved_at: patch.joined_at,
+        });
+      }
+    }
+  }
+
   return NextResponse.json({ data });
 }
 

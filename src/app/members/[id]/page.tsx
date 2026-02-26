@@ -15,6 +15,7 @@ type Member = {
   state?: string | null;
   postal_code?: string | null;
   status: string;
+  joined_at?: string | null;
 };
 
 type Course = {
@@ -610,6 +611,19 @@ export default function MemberDetailPage() {
             </div>
 
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                Town Approval Date:
+                <input
+                  type="date"
+                  value={member.joined_at ?? ""}
+                  onChange={(e) => setMember({ ...member, joined_at: e.target.value || null })}
+                />
+              </label>
+              {!member.joined_at ? (
+                <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #f0c040", borderRadius: 999, background: "#fffbe6", color: "#7a5a00" }}>
+                  Applicant
+                </span>
+              ) : null}
               <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 Status:
                 <select value={member.status} onChange={(e) => setMember({ ...member, status: e.target.value })}>
