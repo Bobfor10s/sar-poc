@@ -41,7 +41,7 @@ type TaskMapRow = {
 };
 
 type MemberRow = { id: string; first_name: string; last_name: string };
-type PositionRow = { id: string; code: string; name: string };
+type PositionRow = { id: string; code: string; name: string; position_type?: string };
 type TaskRow = { id: string; task_code: string; task_name: string; description?: string | null; is_active?: boolean };
 
 type SignoffRow = {
@@ -52,6 +52,28 @@ type SignoffRow = {
   evaluator_name?: string | null;
   signed_at: string;
   notes?: string | null;
+};
+
+type SearchGroup = {
+  id: string;
+  name: string;
+  notes: string | null;
+  created_at: string;
+  training_session_id: string | null;
+  call_id: string | null;
+  search_group_members?: SearchGroupMember[];
+};
+
+type SearchGroupMember = {
+  id: string;
+  search_group_id: string;
+  member_id: string;
+  position_id: string | null;
+  is_trainee: boolean;
+  notes: string | null;
+  created_at: string;
+  members?: { first_name: string; last_name: string } | null;
+  positions?: { id: string; code: string; name: string } | null;
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,6 +134,13 @@ export default function TrainingDetailPage() {
   const [soEvaluator, setSoEvaluator] = useState("");
   const [soNotes, setSoNotes] = useState("");
 
+  // ── Search groups state ──
+  const [groups, setGroups] = useState<SearchGroup[]>([]);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupMemberAdd, setGroupMemberAdd] = useState<
+    Record<string, { memberId: string; positionId: string; isTrainee: boolean }>
+  >({});
+
   // ── UI state ──
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
@@ -126,13 +155,14 @@ export default function TrainingDetailPage() {
     setBusy("reload");
     setErr("");
     try {
-      const [sessRes, attRes, mapRes, soRes, membersRes, posRes] = await Promise.all([
+      const [sessRes, attRes, mapRes, soRes, membersRes, posRes, groupsRes] = await Promise.all([
         fetch(`/api/training-sessions/${sessionId}`),
         fetch(`/api/training-attendance?training_session_id=${sessionId}`),
         fetch(`/api/training-task-map?training_session_id=${sessionId}`),
         fetch(`/api/member-task-signoffs?training_session_id=${sessionId}`),
         fetch(`/api/members`),
         fetch(`/api/positions`),
+        fetch(`/api/search-groups?training_session_id=${sessionId}`),
       ]);
 
       const sessJson = await sessRes.json().catch(() => ({}));
@@ -146,6 +176,7 @@ export default function TrainingDetailPage() {
       setSessionSignoffs(asArray<SignoffRow>(await soRes.json().catch(() => [])));
       setAllMembers(asArray<MemberRow>(await membersRes.json().catch(() => [])));
       setAllPositions(asArray<PositionRow>(await posRes.json().catch(() => [])));
+      setGroups(asArray<SearchGroup>(await groupsRes.json().catch(() => [])));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     } finally {
@@ -317,6 +348,98 @@ export default function TrainingDetailPage() {
     }
   }
 
+  // ── Search groups ─────────────────────────────────────────────────────────
+
+  async function addGroup() {
+    if (!newGroupName.trim()) return;
+    setBusy("grp-add");
+    try {
+      const res = await fetch("/api/search-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ training_session_id: sessionId, name: newGroupName.trim() }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Failed to create group");
+      setGroups((prev) => [...prev, json.data]);
+      setNewGroupName("");
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deleteGroup(id: string) {
+    setBusy("grp-del-" + id);
+    try {
+      const res = await fetch(`/api/search-groups?id=${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error ?? "Delete failed");
+      }
+      setGroups((prev) => prev.filter((g) => g.id !== id));
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function addMemberToGroup(groupId: string) {
+    const form = groupMemberAdd[groupId];
+    if (!form?.memberId) return;
+    setBusy("sgm-add-" + groupId);
+    try {
+      const res = await fetch("/api/search-group-members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          search_group_id: groupId,
+          member_id: form.memberId,
+          position_id: form.positionId || null,
+          is_trainee: form.isTrainee ?? true,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Failed to add member");
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === groupId
+            ? { ...g, search_group_members: [...(g.search_group_members ?? []), json.data] }
+            : g
+        )
+      );
+      setGroupMemberAdd((prev) => ({ ...prev, [groupId]: { memberId: "", positionId: "", isTrainee: true } }));
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function removeMemberFromGroup(sgmId: string, groupId: string) {
+    setBusy("sgm-del-" + sgmId);
+    try {
+      const res = await fetch(`/api/search-group-members?id=${sgmId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error ?? "Delete failed");
+      }
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === groupId
+            ? { ...g, search_group_members: (g.search_group_members ?? []).filter((m) => m.id !== sgmId) }
+            : g
+        )
+      );
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
   // Group sign-offs by member for display
   const signoffsByMember = useMemo(() => {
     const map = new Map<string, SignoffRow[]>();
@@ -438,6 +561,137 @@ export default function TrainingDetailPage() {
           </ul>
         ) : (
           <p style={muted}>No members added yet.</p>
+        )}
+      </section>
+
+      {/* ── Search Groups ── */}
+      <section style={sectionStyle}>
+        <h2 style={h2}>Search Groups <span style={muted}>({groups.length})</span></h2>
+
+        {/* Add group form */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+          <input
+            style={{ ...inputStyle, flex: 1 }}
+            placeholder="Group name (e.g. Team Alpha)"
+            value={newGroupName}
+            onChange={(e) => setNewGroupName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addGroup(); }}
+          />
+          <button type="button" onClick={addGroup} disabled={!newGroupName.trim() || busy !== ""}>
+            {busy === "grp-add" ? "Adding…" : "Add Group"}
+          </button>
+        </div>
+
+        {groups.length === 0 ? (
+          <p style={muted}>No groups yet.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {groups.map((g) => {
+              const gMembers = g.search_group_members ?? [];
+              const memberIdsInGroup = new Set(gMembers.map((m) => m.member_id));
+              const form = groupMemberAdd[g.id] ?? { memberId: "", positionId: "", isTrainee: true };
+              const fieldRolePositions = allPositions.filter((p) => p.position_type === "field_role");
+
+              return (
+                <div key={g.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+                  {/* Group header */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <strong style={{ fontSize: 14 }}>{g.name}</strong>
+                    <button
+                      type="button"
+                      onClick={() => deleteGroup(g.id)}
+                      disabled={busy !== ""}
+                      style={{ fontSize: 12, padding: "2px 8px" }}
+                    >
+                      Delete Group
+                    </button>
+                  </div>
+
+                  {/* Member list */}
+                  {gMembers.length > 0 ? (
+                    <ul style={{ paddingLeft: 0, listStyle: "none", marginBottom: 10 }}>
+                      {gMembers.map((m) => {
+                        const name = m.members
+                          ? `${m.members.first_name} ${m.members.last_name}`
+                          : m.member_id;
+                        return (
+                          <li key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #f0f0f0", fontSize: 13 }}>
+                            <div>
+                              <strong>{name}</strong>
+                              {m.positions ? (
+                                <span style={{ ...muted, marginLeft: 8 }}>{m.positions.code}</span>
+                              ) : null}
+                              <span style={{
+                                marginLeft: 8, fontSize: 11, padding: "1px 6px",
+                                border: "1px solid #ddd", borderRadius: 999,
+                                background: m.is_trainee ? "#fffbe6" : "#e6f7e6",
+                              }}>
+                                {m.is_trainee ? "trainee" : "qualified"}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeMemberFromGroup(m.id, g.id)}
+                              disabled={busy !== ""}
+                              style={{ fontSize: 11, padding: "1px 7px" }}
+                            >
+                              Remove
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p style={{ ...muted, marginBottom: 8 }}>No members in this group.</p>
+                  )}
+
+                  {/* Add member sub-form */}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <select
+                      style={{ ...inputStyle, flex: 1, minWidth: 140 }}
+                      value={form.memberId}
+                      onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, memberId: e.target.value } }))}
+                    >
+                      <option value="">Add attendee…</option>
+                      {attendance
+                        .filter((a) => !memberIdsInGroup.has(a.member_id))
+                        .map((a) => {
+                          const m = a.members;
+                          const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
+                          return <option key={a.member_id} value={a.member_id}>{name}</option>;
+                        })}
+                    </select>
+                    <select
+                      style={{ ...inputStyle, flex: 1, minWidth: 140 }}
+                      value={form.positionId}
+                      onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, positionId: e.target.value } }))}
+                    >
+                      <option value="">Role (optional)…</option>
+                      {fieldRolePositions.map((p) => (
+                        <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                      ))}
+                    </select>
+                    <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, whiteSpace: "nowrap" }}>
+                      <input
+                        type="checkbox"
+                        checked={form.isTrainee ?? true}
+                        onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, isTrainee: e.target.checked } }))}
+                      />
+                      Trainee
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => addMemberToGroup(g.id)}
+                      disabled={!form.memberId || busy !== ""}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      {busy === "sgm-add-" + g.id ? "Adding…" : "Add"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
 

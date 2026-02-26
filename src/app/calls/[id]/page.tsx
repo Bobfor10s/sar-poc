@@ -70,6 +70,28 @@ type SignoffRow = {
   call_id?: string | null;
 };
 
+type SearchGroup = {
+  id: string;
+  name: string;
+  notes: string | null;
+  created_at: string;
+  training_session_id: string | null;
+  call_id: string | null;
+  search_group_members?: SearchGroupMember[];
+};
+
+type SearchGroupMember = {
+  id: string;
+  search_group_id: string;
+  member_id: string;
+  position_id: string | null;
+  is_trainee: boolean;
+  notes: string | null;
+  created_at: string;
+  members?: { first_name: string; last_name: string } | null;
+  positions?: { id: string; code: string; name: string } | null;
+};
+
 function asArray<T>(json: any): T[] {
   if (Array.isArray(json)) return json as T[];
   return (json?.data ?? []) as T[];
@@ -113,12 +135,21 @@ export default function CallDetailPage() {
   const [notes, setNotes] = useState<CallNote[]>([]);
 
   const [selectedMemberId, setSelectedMemberId] = useState("");
-  const [busy, setBusy] = useState<
-    "" | "save" | "addNote" | "add" | "arrive" | "clear" | "reload" | "signoff"
-  >("");
+  const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
 
   const [noteText, setNoteText] = useState("");
+
+  // ── Field teams (search groups) state ──
+  const [groups, setGroups] = useState<SearchGroup[]>([]);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupMemberAdd, setGroupMemberAdd] = useState<
+    Record<string, { memberId: string; positionId: string; isTrainee: boolean }>
+  >({});
+  const [groupErr, setGroupErr] = useState<Record<string, string>>({});
+  const [allPositions, setAllPositions] = useState<
+    { id: string; code: string; name: string; position_type?: string }[]
+  >([]);
 
   // ── Mission Competency state ──
   const [compMemberId, setCompMemberId] = useState("");
@@ -159,12 +190,14 @@ export default function CallDetailPage() {
       setBusy("reload");
       setErr("");
 
-      const [callRes, membersRes, attRes, notesRes, soRes] = await Promise.all([
+      const [callRes, membersRes, attRes, notesRes, soRes, groupsRes, posRes] = await Promise.all([
         fetch(`/api/calls/${callId}`),
         fetch(`/api/members`),
         fetch(`/api/calls/${callId}/attendance`),
         fetch(`/api/calls/${callId}/notes`),
         fetch(`/api/member-task-signoffs?call_id=${callId}`),
+        fetch(`/api/search-groups?call_id=${callId}`),
+        fetch(`/api/positions`),
       ]);
 
       const callJson = await callRes.json().catch(() => ({}));
@@ -182,6 +215,9 @@ export default function CallDetailPage() {
 
       const soJson = await soRes.json().catch(() => ([]));
       setCompSignoffs(asArray<SignoffRow>(soJson));
+
+      setGroups(asArray<SearchGroup>(await groupsRes.json().catch(() => [])));
+      setAllPositions(asArray<{ id: string; code: string; name: string; position_type?: string }>(await posRes.json().catch(() => [])));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     } finally {
@@ -236,6 +272,106 @@ export default function CallDetailPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Sign-off failed");
       setCompSignoffs((prev) => [json.data, ...prev]);
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  // ── Field teams ────────────────────────────────────────────────────────────
+
+  async function addGroup() {
+    if (!newGroupName.trim()) return;
+    setBusy("grp-add");
+    try {
+      const res = await fetch("/api/search-groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ call_id: callId, name: newGroupName.trim() }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Failed to create group");
+      setGroups((prev) => [...prev, json.data]);
+      setNewGroupName("");
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function deleteGroup(id: string) {
+    setBusy("grp-del-" + id);
+    try {
+      const res = await fetch(`/api/search-groups?id=${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error ?? "Delete failed");
+      }
+      setGroups((prev) => prev.filter((g) => g.id !== id));
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function addMemberToGroup(groupId: string) {
+    const form = groupMemberAdd[groupId];
+    if (!form?.memberId) return;
+    setGroupErr((prev) => ({ ...prev, [groupId]: "" }));
+    setBusy("sgm-add-" + groupId);
+    try {
+      const res = await fetch("/api/search-group-members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          search_group_id: groupId,
+          member_id: form.memberId,
+          position_id: form.positionId || null,
+          is_trainee: form.isTrainee ?? false,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (json?.code === "NOT_QUALIFIED") {
+          setGroupErr((prev) => ({ ...prev, [groupId]: json.error }));
+        } else {
+          throw new Error(json?.error ?? "Failed to add member");
+        }
+        return;
+      }
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === groupId
+            ? { ...g, search_group_members: [...(g.search_group_members ?? []), json.data] }
+            : g
+        )
+      );
+      setGroupMemberAdd((prev) => ({ ...prev, [groupId]: { memberId: "", positionId: "", isTrainee: false } }));
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function removeMemberFromGroup(sgmId: string, groupId: string) {
+    setBusy("sgm-del-" + sgmId);
+    try {
+      const res = await fetch(`/api/search-group-members?id=${sgmId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json?.error ?? "Delete failed");
+      }
+      setGroups((prev) =>
+        prev.map((g) =>
+          g.id === groupId
+            ? { ...g, search_group_members: (g.search_group_members ?? []).filter((m) => m.id !== sgmId) }
+            : g
+        )
+      );
     } catch (e: any) {
       alert(e?.message ?? String(e));
     } finally {
@@ -593,6 +729,147 @@ export default function CallDetailPage() {
                 </li>
               ))}
             </ul>
+          </section>
+
+          {/* ── Field Teams ── */}
+          <section style={{ marginTop: 16, padding: 14, border: "1px solid #e5e5e5", borderRadius: 10 }}>
+            <h2 style={{ marginTop: 0 }}>Field Teams <span style={{ fontSize: 13, fontWeight: 400, opacity: 0.65 }}>({groups.length})</span></h2>
+
+            {/* Add group form */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <input
+                style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                placeholder="Team name (e.g. Team Alpha)"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") addGroup(); }}
+              />
+              <button type="button" onClick={addGroup} disabled={!newGroupName.trim() || busy !== ""}>
+                {busy === "grp-add" ? "Adding…" : "Add Team"}
+              </button>
+            </div>
+
+            {groups.length === 0 ? (
+              <p style={{ fontSize: 12, opacity: 0.65 }}>No field teams yet.</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {groups.map((g) => {
+                  const gMembers = g.search_group_members ?? [];
+                  const memberIdsInGroup = new Set(gMembers.map((m) => m.member_id));
+                  const form = groupMemberAdd[g.id] ?? { memberId: "", positionId: "", isTrainee: false };
+                  const fieldRolePositions = allPositions.filter((p) => p.position_type === "field_role");
+                  const errMsg = groupErr[g.id];
+
+                  return (
+                    <div key={g.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+                      {/* Group header */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <strong style={{ fontSize: 14 }}>{g.name}</strong>
+                        <button
+                          type="button"
+                          onClick={() => deleteGroup(g.id)}
+                          disabled={busy !== ""}
+                          style={{ fontSize: 12, padding: "2px 8px" }}
+                        >
+                          Delete Team
+                        </button>
+                      </div>
+
+                      {/* Error banner */}
+                      {errMsg ? (
+                        <div style={{ marginBottom: 8, padding: "6px 10px", background: "#fff0f0", border: "1px solid #f5b7b1", borderRadius: 6, fontSize: 12, color: "#c0392b" }}>
+                          {errMsg}
+                        </div>
+                      ) : null}
+
+                      {/* Member list */}
+                      {gMembers.length > 0 ? (
+                        <ul style={{ paddingLeft: 0, listStyle: "none", marginBottom: 10 }}>
+                          {gMembers.map((m) => {
+                            const name = m.members
+                              ? `${m.members.first_name} ${m.members.last_name}`
+                              : m.member_id;
+                            return (
+                              <li key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #f0f0f0", fontSize: 13 }}>
+                                <div>
+                                  <strong>{name}</strong>
+                                  {m.positions ? (
+                                    <span style={{ fontSize: 12, opacity: 0.65, marginLeft: 8 }}>{m.positions.code}</span>
+                                  ) : null}
+                                  <span style={{
+                                    marginLeft: 8, fontSize: 11, padding: "1px 6px",
+                                    border: "1px solid #ddd", borderRadius: 999,
+                                    background: m.is_trainee ? "#fffbe6" : "#e6f7e6",
+                                  }}>
+                                    {m.is_trainee ? "trainee" : "qualified"}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeMemberFromGroup(m.id, g.id)}
+                                  disabled={busy !== ""}
+                                  style={{ fontSize: 11, padding: "1px 7px" }}
+                                >
+                                  Remove
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p style={{ fontSize: 12, opacity: 0.65, marginBottom: 8 }}>No members assigned.</p>
+                      )}
+
+                      {/* Add member sub-form */}
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                        <select
+                          style={{ flex: 1, minWidth: 140, padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                          value={form.memberId}
+                          onChange={(e) => {
+                            setGroupErr((prev) => ({ ...prev, [g.id]: "" }));
+                            setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, memberId: e.target.value } }));
+                          }}
+                        >
+                          <option value="">Assign member…</option>
+                          {attendance
+                            .filter((a) => !memberIdsInGroup.has(a.member_id))
+                            .map((a) => {
+                              const name = memberName(a.member_id);
+                              return <option key={a.member_id} value={a.member_id}>{name}</option>;
+                            })}
+                        </select>
+                        <select
+                          style={{ flex: 1, minWidth: 140, padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                          value={form.positionId}
+                          onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, positionId: e.target.value } }))}
+                        >
+                          <option value="">Role (optional)…</option>
+                          {fieldRolePositions.map((p) => (
+                            <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                          ))}
+                        </select>
+                        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, whiteSpace: "nowrap" }}>
+                          <input
+                            type="checkbox"
+                            checked={form.isTrainee ?? false}
+                            onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, isTrainee: e.target.checked } }))}
+                          />
+                          Assign as trainee (not yet qualified for this role)
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => addMemberToGroup(g.id)}
+                          disabled={!form.memberId || busy !== ""}
+                          style={{ whiteSpace: "nowrap" }}
+                        >
+                          {busy === "sgm-add-" + g.id ? "Adding…" : "Assign"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           {/* ── Mission Competency Sign-offs ── */}
