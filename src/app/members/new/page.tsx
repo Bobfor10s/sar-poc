@@ -25,6 +25,7 @@ export default function NewMemberPage() {
     state: "NJ",
     postal_code: "",
     status: "active",
+    joined_at: new Date().toISOString().slice(0, 10),
   });
 
   async function save(e: React.FormEvent) {
@@ -129,15 +130,24 @@ export default function NewMemberPage() {
         </div>
 
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Town Approval Date</div>
+            <input
+              type="date"
+              style={{ width: "100%", padding: 8 }}
+              value={form.joined_at}
+              onChange={(e) => setForm({ ...form, joined_at: e.target.value })}
+            />
+          </div>
           <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             <option value="active">active</option>
             <option value="inactive">inactive</option>
           </select>
-
-          <button type="submit" disabled={busy}>
-            {busy ? "Saving…" : "Save Member"}
-          </button>
         </div>
+
+        <button type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save Member"}
+        </button>
       </form>
     </main>
   );

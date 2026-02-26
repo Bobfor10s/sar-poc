@@ -83,6 +83,10 @@ export async function POST(req: Request) {
     );
   }
 
+  const joined_at = typeof body.joined_at === "string" && body.joined_at.trim()
+    ? body.joined_at.trim()
+    : null;
+
   const { data, error } = await supabaseDb
     .from("members")
     .insert({
@@ -97,12 +101,29 @@ export async function POST(req: Request) {
       postal_code: body.postal_code ?? null,
       town: body.town ?? null,
       status: "active",
+      joined_at,
     })
     .select("*")
     .single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Auto-assign SEARCHER position as qualified, dated to town approval
+  const { data: searcherPos } = await supabaseDb
+    .from("positions")
+    .select("id")
+    .eq("code", "SEARCHER")
+    .single();
+
+  if (searcherPos) {
+    await supabaseDb.from("member_positions").insert({
+      member_id: data.id,
+      position_id: searcherPos.id,
+      status: "qualified",
+      approved_at: joined_at ?? new Date().toISOString(),
+    });
   }
 
   return NextResponse.json({ data }, { status: 201 });
