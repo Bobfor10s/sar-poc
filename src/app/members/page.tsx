@@ -19,6 +19,7 @@ type MemberRow = {
   town?: string | null;
 
   status?: string | null;
+  joined_at?: string | null;
 
   // from members_with_sar view (if you’re using it)
   sar_codes?: string | null;
@@ -321,9 +322,15 @@ export default function MembersPage() {
                     </td>
 
                     <td style={td}>
-                      <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>
-                        {(m.status ?? "active").toLowerCase()}
-                      </span>
+                      {!m.joined_at ? (
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #f0c040", borderRadius: 999, background: "#fffbe6", color: "#7a5a00" }}>
+                          Applicant
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>
+                          {(m.status ?? "active").toLowerCase()}
+                        </span>
+                      )}
                     </td>
 
                     <td style={td}>{m.email ?? <span style={{ opacity: 0.5 }}>—</span>}</td>
