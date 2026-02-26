@@ -11,6 +11,7 @@ const links = [
   { href: "/events", label: "Events" },
   { href: "/admin/courses", label: "Courses" },
   { href: "/admin/positions", label: "Positions" },
+  { href: "/admin/approvals", label: "Approvals" },
 ];
 
 export default function Nav() {
