@@ -10,6 +10,7 @@ const links = [
   { href: "/meetings", label: "Meetings" },
   { href: "/events", label: "Events" },
   { href: "/admin/courses", label: "Courses" },
+  { href: "/admin/positions", label: "Positions" },
 ];
 
 export default function Nav() {

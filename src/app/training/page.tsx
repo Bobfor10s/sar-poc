@@ -194,7 +194,7 @@ export default function TrainingPage() {
                     <div className={styles.row}>
                       <span className={`${styles.badge} ${badgeClass(st, styles)}`}>{st}</span>
                       {r.is_test ? <span className={`${styles.badge} ${styles.badgeTest}`}>TEST</span> : null}
-                      <Link href={`/training/${r.id}`} style={{ textDecoration: "none", color: "inherit" }}><strong>{r.title}</strong></Link>
+                      <Link href={`/training/${r.id}`} style={{ fontWeight: 700, cursor: "pointer" }}>{r.title}</Link>
                       {r.start_dt ? <span className={styles.muted}>{fmtDate(r.start_dt)}</span> : null}
                       {r.location_text ? <span className={styles.muted}>• {r.location_text}</span> : null}
                       {r.instructor ? <span className={styles.muted}>• Instructor: {r.instructor}</span> : null}

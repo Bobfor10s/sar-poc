@@ -51,10 +51,12 @@ type MemberPosition = {
 
 type ReqRow = {
   id: string;
-  req_kind: "course" | "position" | string;
+  req_kind: "course" | "position" | "task" | string;
   notes?: string | null;
   courses?: { id: string; code: string; name: string } | null;
   required_position?: { id: string; code: string; name: string } | null;
+  tasks?: { id: string; task_code: string; task_name: string } | null;
+  task_id?: string | null;
 };
 
 type TaskRow = {
@@ -456,6 +458,14 @@ export default function MemberDetailPage() {
           }
         }
       }
+      if (r.req_kind === "task") {
+        const reqTaskId = r.task_id ?? r.tasks?.id;
+        if (reqTaskId) {
+          const signoffs = signoffsByPosition[position_id] ?? [];
+          const signed = signoffs.some((s) => s.task_id === reqTaskId);
+          if (!signed) ok = false;
+        }
+      }
     }
 
     const tasks = (tasksByPosition[position_id] ?? []).filter((t) => t.is_active);
@@ -811,6 +821,22 @@ export default function MemberDetailPage() {
                               {prereqId && !reqsByPosition[prereqId] ? (
                                 <div style={{ marginLeft: 28, fontSize: 12, opacity: 0.6 }}>Loading prereq requirements…</div>
                               ) : null}
+                            </div>
+                          );
+                        }
+
+                        if (r.req_kind === "task") {
+                          const reqTaskId = r.task_id ?? r.tasks?.id;
+                          const signoffs = signoffsByPosition[pid] ?? [];
+                          const signed = !!reqTaskId && signoffs.some((s) => s.task_id === reqTaskId);
+                          return (
+                            <div key={r.id} style={{ display: "flex", gap: 6, alignItems: "flex-start" }}>
+                              <span style={{ width: 18 }}>{signed ? "✅" : "⬜"}</span>
+                              <span>
+                                <strong>{r.tasks?.task_code ?? "?"}</strong>
+                                {" — "}{r.tasks?.task_name ?? "Unknown task"}
+                                {r.notes ? <span style={{ opacity: 0.65 }}> ({r.notes})</span> : null}
+                              </span>
                             </div>
                           );
                         }

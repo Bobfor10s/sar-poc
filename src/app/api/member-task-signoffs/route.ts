@@ -19,8 +19,10 @@ async function checkPositionRequirements(member_id: string, position_id: string)
       req_kind,
       course_id,
       required_position_id,
+      task_id,
       courses:course_id ( id, code, name ),
-      positions:required_position_id ( id, code, name )
+      positions:required_position_id ( id, code, name ),
+      tasks:task_id ( id, task_code, task_name )
     `
     )
     .eq("position_id", position_id);
@@ -75,6 +77,23 @@ async function checkPositionRequirements(member_id: string, position_id: string)
             const c = (pr as any).courses;
             missing_courses.push(c?.code ? String(c.code) : String(cid));
           }
+        }
+      }
+    }
+
+    if (kind === "task") {
+      const req_task_id = (r as any).task_id;
+      if (req_task_id) {
+        const { data: signoff } = await supabaseDb
+          .from("member_task_signoffs")
+          .select("id")
+          .eq("member_id", member_id)
+          .eq("position_id", position_id)
+          .eq("task_id", req_task_id)
+          .maybeSingle();
+        if (!signoff) {
+          const taskCode = (r as any).tasks?.task_code ?? req_task_id;
+          missing_courses.push(`TASK:${taskCode}`);
         }
       }
     }

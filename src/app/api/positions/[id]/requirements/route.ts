@@ -20,7 +20,7 @@ export async function GET(_req: Request, ctx: any) {
     return NextResponse.json({ error: "bad position id" }, { status: 400 });
   }
 
-  // Requirements (course + prerequisite position)
+  // Requirements (course + prerequisite position + task)
   const req = await supabaseDb
     .from("position_requirements")
     .select(`
@@ -29,8 +29,10 @@ export async function GET(_req: Request, ctx: any) {
       notes,
       within_months,
       min_count,
+      task_id,
       courses:course_id ( id, code, name ),
-      required_position:required_position_id ( id, code, name )
+      required_position:required_position_id ( id, code, name ),
+      tasks:task_id ( id, task_code, task_name )
     `)
     .eq("position_id", position_id)
     .order("created_at", { ascending: true });
@@ -52,4 +54,85 @@ export async function GET(_req: Request, ctx: any) {
       tasks: tasks.data ?? [],
     },
   });
+}
+
+export async function POST(req: Request, ctx: any) {
+  const position_id = await getIdFromCtx(ctx);
+  if (!position_id || !isUuid(position_id)) {
+    return NextResponse.json({ error: "bad position id" }, { status: 400 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const req_kind = String(body.req_kind ?? "").trim().toLowerCase();
+
+  if (!["course", "position", "task"].includes(req_kind)) {
+    return NextResponse.json({ error: "req_kind must be course, position, or task" }, { status: 400 });
+  }
+
+  const payload: Record<string, any> = {
+    position_id,
+    req_kind,
+    notes: body.notes ? String(body.notes).trim() : null,
+  };
+
+  if (req_kind === "course") {
+    const course_id = String(body.course_id ?? "").trim();
+    if (!course_id || !isUuid(course_id)) {
+      return NextResponse.json({ error: "course_id required for req_kind=course" }, { status: 400 });
+    }
+    payload.course_id = course_id;
+  } else if (req_kind === "position") {
+    const required_position_id = String(body.required_position_id ?? "").trim();
+    if (!required_position_id || !isUuid(required_position_id)) {
+      return NextResponse.json({ error: "required_position_id required for req_kind=position" }, { status: 400 });
+    }
+    payload.required_position_id = required_position_id;
+  } else if (req_kind === "task") {
+    const task_id = String(body.task_id ?? "").trim();
+    if (!task_id || !isUuid(task_id)) {
+      return NextResponse.json({ error: "task_id required for req_kind=task" }, { status: 400 });
+    }
+    payload.task_id = task_id;
+  }
+
+  const { data, error } = await supabaseDb
+    .from("position_requirements")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ data }, { status: 201 });
+}
+
+export async function DELETE(req: Request, ctx: any) {
+  const position_id = await getIdFromCtx(ctx);
+  if (!position_id || !isUuid(position_id)) {
+    return NextResponse.json({ error: "bad position id" }, { status: 400 });
+  }
+
+  const url = new URL(req.url);
+  const req_id = (url.searchParams.get("req_id") ?? "").trim();
+  if (!req_id || !isUuid(req_id)) {
+    return NextResponse.json({ error: "req_id query param required" }, { status: 400 });
+  }
+
+  // Verify it belongs to this position before deleting
+  const { data: existing, error: findErr } = await supabaseDb
+    .from("position_requirements")
+    .select("id")
+    .eq("id", req_id)
+    .eq("position_id", position_id)
+    .maybeSingle();
+
+  if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 });
+  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+
+  const { error } = await supabaseDb
+    .from("position_requirements")
+    .delete()
+    .eq("id", req_id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
 }
