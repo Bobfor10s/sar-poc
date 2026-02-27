@@ -9,11 +9,11 @@ export async function GET() {
     supabaseDb.from("members").select("*").order("last_name", { ascending: true }),
     supabaseDb
       .from("member_positions")
-      .select("member_id, position_id, status, approved_at, awarded_at, positions:position_id(code, name, level)")
+      .select("member_id, position_id, status, approved_at, awarded_at, positions:position_id(code, name, level, position_type)")
       .or("status.eq.qualified,approved_at.not.is.null,awarded_at.not.is.null"),
     supabaseDb
       .from("member_certifications")
-      .select("member_id, course_id, expires_at, courses:course_id(never_expires)"),
+      .select("member_id, course_id, expires_at, courses:course_id(code, never_expires, show_on_roster)"),
     supabaseDb
       .from("position_requirements")
       .select("position_id, req_kind, course_id")
@@ -41,13 +41,35 @@ export async function GET() {
 
   // For each member, find positions where all required certs are valid
   const validPositionsByMember = new Map<string, any[]>();
+  // Also track field_role positions (capabilities)
+  const fieldRolesByMember = new Map<string, string[]>();
   for (const mp of positionsRes.data ?? []) {
+    const pos = (mp as any).positions;
+    if (!pos) continue;
     const requiredCourses = requiredCoursesByPosition.get(mp.position_id) ?? [];
     const memberCerts = validCertsByMember.get(mp.member_id) ?? new Set();
     const allMet = requiredCourses.every((cid) => memberCerts.has(cid));
     if (!allMet) continue;
     if (!validPositionsByMember.has(mp.member_id)) validPositionsByMember.set(mp.member_id, []);
-    validPositionsByMember.get(mp.member_id)!.push((mp as any).positions);
+    validPositionsByMember.get(mp.member_id)!.push(pos);
+
+    // Capture field_role positions (excl. SEARCHER) as capabilities
+    if (pos.position_type === "field_role" && pos.code !== "SEARCHER" && mp.status === "qualified") {
+      if (!fieldRolesByMember.has(mp.member_id)) fieldRolesByMember.set(mp.member_id, []);
+      fieldRolesByMember.get(mp.member_id)!.push(pos.code as string);
+    }
+  }
+
+  // Build show_on_roster cert codes per member
+  const rosterCertsByMember = new Map<string, string[]>();
+  for (const cert of certsRes.data ?? []) {
+    const course = (cert as any).courses;
+    if (!course?.show_on_roster) continue;
+    const neverExpires = course.never_expires ?? false;
+    const valid = neverExpires || !cert.expires_at || cert.expires_at >= today;
+    if (!valid) continue;
+    if (!rosterCertsByMember.has(cert.member_id)) rosterCertsByMember.set(cert.member_id, []);
+    rosterCertsByMember.get(cert.member_id)!.push(course.code as string);
   }
 
   // Attach SAR typing fields to each member
@@ -57,6 +79,8 @@ export async function GET() {
       .sort((a: any, b: any) => (b.level ?? 0) - (a.level ?? 0));
 
     const primary = positions[0] ?? null;
+    const hasFemaTyping = positions.some((p: any) => p.position_type === "land_sar");
+
     return {
       ...m,
       sar_codes: positions.map((p: any) => p.code).join(", ") || null,
@@ -64,6 +88,9 @@ export async function GET() {
       sar_primary_code: primary?.code ?? null,
       sar_primary_name: primary?.name ?? null,
       sar_primary_rank: primary?.level ?? null,
+      // Capabilities: field roles shown when no FEMA typing, plus always show roster certs
+      field_roles: hasFemaTyping ? [] : (fieldRolesByMember.get(m.id) ?? []),
+      roster_certs: rosterCertsByMember.get(m.id) ?? [],
     };
   });
 

@@ -17,6 +17,7 @@ export async function POST(req: Request) {
   const code = String(body.code ?? "").trim();
   const name = String(body.name ?? "").trim();
   const never_expires = !!body.never_expires;
+  const show_on_roster = !!body.show_on_roster;
 
   if (!code || !name) {
     return NextResponse.json({ error: "code and name are required" }, { status: 400 });
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
     valid_months,
     warning_days,
     never_expires,
+    show_on_roster,
     is_active: body.is_active === false ? false : true,
   };
 

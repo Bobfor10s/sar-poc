@@ -8,7 +8,8 @@ type Course = {
   name: string;
   valid_months: number;
   warning_days: number;
-  never_expires: boolean; // ✅ NEW
+  never_expires: boolean;
+  show_on_roster: boolean;
   is_active: boolean;
 };
 
@@ -17,7 +18,8 @@ type EditRow = {
   name: string;
   valid_months: string; // keep as string for input editing
   warning_days: string; // keep as string for input editing
-  never_expires: boolean; // ✅ NEW
+  never_expires: boolean;
+  show_on_roster: boolean;
   is_active: boolean;
   dirty: boolean;
   saving: boolean;
@@ -33,7 +35,8 @@ export default function CoursesAdminPage() {
     name: "",
     valid_months: "",
     warning_days: "",
-    never_expires: false, // ✅ NEW
+    never_expires: false,
+    show_on_roster: false,
   });
 
   async function load() {
@@ -51,6 +54,7 @@ export default function CoursesAdminPage() {
         valid_months: String(c.valid_months ?? 24),
         warning_days: String(c.warning_days ?? 30),
         never_expires: !!c.never_expires,
+        show_on_roster: !!c.show_on_roster,
         is_active: !!c.is_active,
         dirty: false,
         saving: false,
@@ -112,6 +116,7 @@ export default function CoursesAdminPage() {
       code,
       name,
       never_expires,
+      show_on_roster: !!form.show_on_roster,
       // If never expires, these are ignored by rules/logic; keep sane values anyway:
       valid_months: never_expires ? 24 : Number(valid_months),
       warning_days: never_expires ? 0 : Number(warning_days),
@@ -130,7 +135,7 @@ export default function CoursesAdminPage() {
       return;
     }
 
-    setForm({ code: "", name: "", valid_months: "", warning_days: "", never_expires: false });
+    setForm({ code: "", name: "", valid_months: "", warning_days: "", never_expires: false, show_on_roster: false });
     load();
   }
 
@@ -172,6 +177,7 @@ export default function CoursesAdminPage() {
           code,
           name,
           never_expires,
+          show_on_roster: !!row.show_on_roster,
           valid_months: never_expires ? 24 : Number(valid_months),
           warning_days: never_expires ? 0 : Number(warning_days),
           is_active: row.is_active,
@@ -196,6 +202,7 @@ export default function CoursesAdminPage() {
             valid_months: String(updated.valid_months),
             warning_days: String(updated.warning_days),
             never_expires: !!updated.never_expires,
+            show_on_roster: !!updated.show_on_roster,
             is_active: updated.is_active,
             dirty: false,
             saving: false,
@@ -267,6 +274,18 @@ export default function CoursesAdminPage() {
           </span>
         </label>
 
+        <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={form.show_on_roster}
+            onChange={(e) => setForm((prev) => ({ ...prev, show_on_roster: e.target.checked }))}
+          />
+          <span style={{ fontSize: 13, fontWeight: 700 }}>Show on roster</span>
+          <span style={{ fontSize: 12, opacity: 0.7 }}>
+            (badge appears on member list — use for medical credentials)
+          </span>
+        </label>
+
         <div style={{ display: "grid", gap: 6 }}>
           <label style={{ fontSize: 13, fontWeight: 600 }}>Certification length (months)</label>
           <input
@@ -316,6 +335,7 @@ export default function CoursesAdminPage() {
                 <th style={th}>Never expires</th>
                 <th style={th}>Valid (months)</th>
                 <th style={th}>Warn (days)</th>
+                <th style={th}>Show on roster</th>
                 <th style={th}>Active</th>
                 <th style={th}></th>
               </tr>
@@ -381,6 +401,19 @@ export default function CoursesAdminPage() {
                       <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <input
                           type="checkbox"
+                          checked={row.show_on_roster}
+                          onChange={() => setRow(c.id, { show_on_roster: !row.show_on_roster })}
+                        />
+                        <span style={{ fontSize: 12, opacity: 0.8 }}>
+                          {row.show_on_roster ? "yes" : "no"}
+                        </span>
+                      </label>
+                    </td>
+
+                    <td style={td}>
+                      <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          type="checkbox"
                           checked={row.is_active}
                           onChange={() => toggleActive(c.id)}
                         />
@@ -412,6 +445,7 @@ export default function CoursesAdminPage() {
                               valid_months: String(c.valid_months ?? 24),
                               warning_days: String(c.warning_days ?? 30),
                               never_expires: !!c.never_expires,
+                              show_on_roster: !!c.show_on_roster,
                               is_active: !!c.is_active,
                               dirty: false,
                               saving: false,

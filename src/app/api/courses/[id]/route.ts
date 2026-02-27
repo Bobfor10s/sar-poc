@@ -34,6 +34,7 @@ export async function PATCH(req: Request, ctx: any) {
 
   if (body.never_expires !== undefined) payload.never_expires = !!body.never_expires;
   if (body.is_active !== undefined) payload.is_active = !!body.is_active;
+  if (body.show_on_roster !== undefined) payload.show_on_roster = !!body.show_on_roster;
 
   // Basic validation
   if ("code" in payload && !payload.code) {

@@ -6,6 +6,7 @@ export async function GET() {
     .from("positions")
     .select("*")
     .eq("is_active", true)
+    .order("position_type", { ascending: false })
     .order("code", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

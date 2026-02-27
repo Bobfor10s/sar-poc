@@ -27,6 +27,9 @@ type MemberRow = {
   sar_primary_code?: string | null;
   sar_primary_name?: string | null;
   sar_primary_rank?: number | null;
+  // capabilities
+  field_roles?: string[] | null;
+  roster_certs?: string[] | null;
 };
 
 type SortKey =
@@ -252,7 +255,7 @@ export default function MembersPage() {
                 Name
               </Th>
               <Th onClick={() => toggleSort("sar")} active={sortKey === "sar"} dir={sortDir}>
-                SAR typing
+                Capabilities
               </Th>
               <Th onClick={() => toggleSort("status")} active={sortKey === "status"} dir={sortDir}>
                 Status
@@ -303,22 +306,57 @@ export default function MembersPage() {
                     </td>
 
                     <td style={td}>
-                      {typing ? (
-                        <span
-                          style={{
-                            display: "inline-block",
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            border: "1px solid #ddd",
-                            fontSize: 12,
-                          }}
-                          title={m.sar_positions ?? ""}
-                        >
-                          {typing}
-                        </span>
-                      ) : (
-                        <span style={{ opacity: 0.5 }}>—</span>
-                      )}
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                        {typing && (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              border: "1px solid #94a3b8",
+                              background: "#e2e8f0",
+                              fontSize: 12,
+                              fontWeight: 600,
+                            }}
+                            title={m.sar_positions ?? ""}
+                          >
+                            {typing}
+                          </span>
+                        )}
+                        {(m.field_roles ?? []).map((code) => (
+                          <span
+                            key={code}
+                            style={{
+                              display: "inline-block",
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              border: "1px solid #86efac",
+                              background: "#f0fdf4",
+                              fontSize: 12,
+                            }}
+                          >
+                            {code}
+                          </span>
+                        ))}
+                        {(m.roster_certs ?? []).map((code) => (
+                          <span
+                            key={code}
+                            style={{
+                              display: "inline-block",
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              border: "1px solid #93c5fd",
+                              background: "#eff6ff",
+                              fontSize: 12,
+                            }}
+                          >
+                            {code}
+                          </span>
+                        ))}
+                        {!typing && !(m.field_roles?.length) && !(m.roster_certs?.length) && (
+                          <span style={{ opacity: 0.5 }}>—</span>
+                        )}
+                      </div>
                     </td>
 
                     <td style={td}>
@@ -326,8 +364,12 @@ export default function MembersPage() {
                         <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #f0c040", borderRadius: 999, background: "#fffbe6", color: "#7a5a00" }}>
                           Applicant
                         </span>
+                      ) : (m.status ?? "active").toLowerCase() === "inactive" ? (
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #fca5a5", borderRadius: 999, background: "#fef2f2", color: "#991b1b" }}>
+                          inactive
+                        </span>
                       ) : (
-                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #86efac", borderRadius: 999, background: "#f0fdf4", color: "#166534" }}>
                           {(m.status ?? "active").toLowerCase()}
                         </span>
                       )}
