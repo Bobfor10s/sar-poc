@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requireAuth, requirePermission } from "@/lib/supabase/require-permission";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -60,6 +61,9 @@ async function assertQualified(
 }
 
 export async function GET(req: NextRequest) {
+  const check = await requireAuth();
+  if (!check.ok) return check.response;
+
   const sgId = req.nextUrl.searchParams.get("search_group_id") ?? "";
   if (!isUuid(sgId)) {
     return NextResponse.json({ error: "search_group_id must be a valid UUID" }, { status: 400 });
@@ -76,6 +80,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const check = await requirePermission("manage_calls");
+  if (!check.ok) return check.response;
+
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -113,6 +120,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  const check = await requirePermission("manage_calls");
+  if (!check.ok) return check.response;
+
   const id = req.nextUrl.searchParams.get("id") ?? "";
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a valid UUID" }, { status: 400 });
 
@@ -162,6 +172,9 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const check = await requirePermission("manage_calls");
+  if (!check.ok) return check.response;
+
   const id = req.nextUrl.searchParams.get("id") ?? "";
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a valid UUID" }, { status: 400 });
 

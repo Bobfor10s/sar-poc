@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 export async function GET() {
+  const check = await requirePermission("read_all");
+  if (!check.ok) return check.response;
   const { data, error } = await supabaseDb
     .from("training_sessions")
     .select("*")
@@ -12,6 +15,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const check = await requirePermission("manage_training");
+  if (!check.ok) return check.response;
+
   const body = await req.json().catch(() => ({}));
 
   const title = String(body.title ?? "").trim();

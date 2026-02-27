@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -15,6 +16,9 @@ async function getIdFromCtx(ctx: any): Promise<string> {
 }
 
 export async function POST(req: Request, ctx: any) {
+  const check = await requirePermission("manage_positions");
+  if (!check.ok) return check.response;
+
   const position_id = await getIdFromCtx(ctx);
   if (!position_id || !isUuid(position_id)) {
     return NextResponse.json({ error: "bad position id" }, { status: 400 });
@@ -46,6 +50,9 @@ export async function POST(req: Request, ctx: any) {
 }
 
 export async function DELETE(req: Request, ctx: any) {
+  const check = await requirePermission("manage_positions");
+  if (!check.ok) return check.response;
+
   const position_id = await getIdFromCtx(ctx);
   if (!position_id || !isUuid(position_id)) {
     return NextResponse.json({ error: "bad position id" }, { status: 400 });

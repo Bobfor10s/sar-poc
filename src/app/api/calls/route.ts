@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 export async function GET() {
+  const check = await requirePermission("read_all");
+  if (!check.ok) return check.response;
+
   const { data, error } = await supabaseDb
     .from("calls")
     .select("*")
@@ -15,6 +19,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const check = await requirePermission("manage_calls");
+  if (!check.ok) return check.response;
+
   const body = await req.json();
 
   // Backward-compat: if UI sends { title }, map it into summary

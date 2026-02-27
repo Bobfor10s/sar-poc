@@ -37,30 +37,12 @@ type SortKey =
   | "sar"
   | "status"
   | "email"
-  | "phone"
-  | "city"
-  | "state";
+  | "phone";
 
 function norm(v: any) {
   return String(v ?? "").trim().toLowerCase();
 }
 
-function formatAddress(m: MemberRow) {
-  const line1 = (m.street_address ?? "").trim();
-  const line2 = (m.street_address_2 ?? "").trim();
-  const city = (m.city ?? m.town ?? "").trim();
-  const st = (m.state ?? "").trim();
-  const zip = (m.postal_code ?? "").trim();
-
-  const parts: string[] = [];
-  if (line1) parts.push(line1);
-  if (line2) parts.push(line2);
-
-  const cityLine = [city, st, zip].filter(Boolean).join(" ");
-  if (cityLine) parts.push(cityLine);
-
-  return parts.join(", ");
-}
 
 export default function MembersPage() {
   const [rows, setRows] = useState<MemberRow[]>([]);
@@ -137,13 +119,9 @@ export default function MembersPage() {
         m.email,
         m.phone,
         m.status,
-        m.city,
-        m.town,
-        m.state,
         m.sar_codes,
         m.sar_primary_code,
         m.sar_primary_name,
-        formatAddress(m),
       ]
         .map(norm)
         .join(" | ");
@@ -161,8 +139,6 @@ export default function MembersPage() {
       if (sortKey === "status") return norm(m.status ?? "");
       if (sortKey === "email") return norm(m.email ?? "");
       if (sortKey === "phone") return norm(m.phone ?? "");
-      if (sortKey === "city") return norm(m.city ?? m.town ?? "");
-      if (sortKey === "state") return norm(m.state ?? "");
       return "";
     };
 
@@ -248,7 +224,7 @@ export default function MembersPage() {
       ) : null}
 
       <div style={{ marginTop: 14, overflowX: "auto" }}>
-        <table style={{ width: "100%", minWidth: 980, borderCollapse: "collapse" }}>
+        <table style={{ width: "100%", minWidth: 640, borderCollapse: "collapse" }}>
           <thead>
             <tr>
               <Th onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir}>
@@ -266,26 +242,19 @@ export default function MembersPage() {
               <Th onClick={() => toggleSort("phone")} active={sortKey === "phone"} dir={sortDir}>
                 Phone
               </Th>
-              <Th onClick={() => toggleSort("city")} active={sortKey === "city"} dir={sortDir}>
-                City
-              </Th>
-              <Th onClick={() => toggleSort("state")} active={sortKey === "state"} dir={sortDir}>
-                State
-              </Th>
-              <th style={th}>Address</th>
             </tr>
           </thead>
 
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={8} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={5} style={{ padding: 14, opacity: 0.75 }}>
                   Loading…
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={5} style={{ padding: 14, opacity: 0.75 }}>
                   No members found.
                 </td>
               </tr>
@@ -377,9 +346,6 @@ export default function MembersPage() {
 
                     <td style={td}>{m.email ?? <span style={{ opacity: 0.5 }}>—</span>}</td>
                     <td style={td}>{m.phone ?? <span style={{ opacity: 0.5 }}>—</span>}</td>
-                    <td style={td}>{(m.city ?? m.town ?? "") || <span style={{ opacity: 0.5 }}>—</span>}</td>
-                    <td style={td}>{m.state ?? <span style={{ opacity: 0.5 }}>—</span>}</td>
-                    <td style={td}>{formatAddress(m) || <span style={{ opacity: 0.5 }}>—</span>}</td>
                   </tr>
                 );
               })

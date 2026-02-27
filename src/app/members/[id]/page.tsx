@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
+type AuthUser = {
+  id: string;
+  name: string;
+  role: string;
+  permissions: string[];
+};
+
 type Member = {
   id: string;
   first_name: string;
@@ -16,6 +23,8 @@ type Member = {
   postal_code?: string | null;
   status: string;
   joined_at?: string | null;
+  deactivated_at?: string | null;
+  reactivated_at?: string | null;
 };
 
 type Course = {
@@ -103,6 +112,7 @@ export default function MemberDetailPage() {
   const params = useParams();
   const memberId = typeof (params as any)?.id === "string" ? (params as any).id : "";
 
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
   const [member, setMember] = useState<Member | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [history, setHistory] = useState<CertRow[]>([]);
@@ -110,6 +120,8 @@ export default function MemberDetailPage() {
   const [msg, setMsg] = useState<string>("");
 
   const [ptbErrorByPosition, setPtbErrorByPosition] = useState<Record<string, PtbErr | null>>({});
+  const [roleEdit, setRoleEdit] = useState("");
+  const [roleMsg, setRoleMsg] = useState("");
 
   const [certForm, setCertForm] = useState({ course_id: "", completed_at: "" });
 
@@ -201,6 +213,10 @@ export default function MemberDetailPage() {
   }
 
   useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setAuthUser(json?.user ?? null))
+      .catch(() => setAuthUser(null));
     loadAll().catch((e) => setMsg(e?.message ?? String(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberId]);
@@ -231,26 +247,28 @@ export default function MemberDetailPage() {
     }
   }
 
-  async function deactivateMember() {
+  async function toggleStatus() {
     if (!member) return;
+    const nextStatus = member.status === "inactive" ? "active" : "inactive";
+    const action = nextStatus === "inactive" ? "deactivate" : "reactivate";
+
+    if (!window.confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${member.first_name} ${member.last_name}?`)) return;
+
     setBusy(true);
     setMsg("");
-
     try {
       const res = await fetch(`/api/members/${member.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "inactive" }),
+        body: JSON.stringify({ toggle_status: true }),
       });
-
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMsg(json?.error ?? "Deactivate failed");
+        setMsg(json?.error ?? `${action} failed`);
         return;
       }
-
       setMember(json.data);
-      setMsg("Member deactivated.");
+      setMsg(`Member ${action}d.`);
     } finally {
       setBusy(false);
     }
@@ -624,27 +642,83 @@ export default function MemberDetailPage() {
                   Applicant
                 </span>
               ) : null}
-              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                Status:
-                <select value={member.status} onChange={(e) => setMember({ ...member, status: e.target.value })}>
-                  <option value="active">active</option>
-                  <option value="inactive">inactive</option>
-                </select>
-                {member.status === "inactive" ? (
-                  <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #dc2626", borderRadius: 999, background: "#fca5a5", color: "#7f1d1d", display: "inline-block", minWidth: 66, textAlign: "center", fontWeight: 700 }}>
-                    Inactive
-                  </span>
-                ) : (
-                  <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #16a34a", borderRadius: 999, background: "#86efac", color: "#14532d", display: "inline-block", minWidth: 66, textAlign: "center", fontWeight: 700 }}>
-                    Active
-                  </span>
-                )}
-              </label>
 
               <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
-              <button type="button" onClick={deactivateMember} disabled={busy}>Deactivate</button>
             </div>
           </form>
+
+          {/* Status toggle — requires edit_status permission */}
+          <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            {member.status === "inactive" ? (
+              <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #dc2626", borderRadius: 999, background: "#fca5a5", color: "#7f1d1d", display: "inline-block", minWidth: 66, textAlign: "center", fontWeight: 700 }}>
+                Inactive
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #16a34a", borderRadius: 999, background: "#86efac", color: "#14532d", display: "inline-block", minWidth: 66, textAlign: "center", fontWeight: 700 }}>
+                Active
+              </span>
+            )}
+            {authUser?.permissions.includes("edit_status") && (
+              <button
+                type="button"
+                onClick={toggleStatus}
+                disabled={busy}
+                style={{ padding: "5px 14px", borderRadius: 6, border: "1px solid #94a3b8", background: "#f8fafc", cursor: "pointer", fontSize: 13 }}
+              >
+                {member.status === "inactive" ? "Reactivate" : "Deactivate"}
+              </button>
+            )}
+            {member.deactivated_at && (
+              <span style={{ fontSize: 12, opacity: 0.6 }}>
+                Deactivated: {new Date(member.deactivated_at).toLocaleDateString()}
+              </span>
+            )}
+            {member.reactivated_at && (
+              <span style={{ fontSize: 12, opacity: 0.6 }}>
+                Reactivated: {new Date(member.reactivated_at).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+
+          {/* Role management — requires manage_members permission */}
+          {authUser?.permissions.includes("manage_members") && (
+            <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>Role:</span>
+              <select
+                value={roleEdit || (member as any).role || "member"}
+                onChange={(e) => setRoleEdit(e.target.value)}
+                style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid #cbd5e1", fontSize: 13 }}
+              >
+                <option value="member">member</option>
+                <option value="viewer">viewer</option>
+                <option value="admin">admin</option>
+              </select>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setRoleMsg("");
+                  try {
+                    const res = await fetch(`/api/members/${member.id}/role`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ role: roleEdit || (member as any).role || "member" }),
+                    });
+                    const json = await res.json().catch(() => ({}));
+                    if (!res.ok) { setRoleMsg(json?.error ?? "Save failed"); return; }
+                    setRoleMsg("Role saved.");
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                style={{ padding: "4px 12px", borderRadius: 6, border: "1px solid #94a3b8", background: "#f8fafc", fontSize: 13, cursor: "pointer" }}
+              >
+                Save role
+              </button>
+              {roleMsg && <span style={{ fontSize: 12, opacity: 0.7 }}>{roleMsg}</span>}
+            </div>
+          )}
 
           <hr style={{ margin: "24px 0" }} />
 

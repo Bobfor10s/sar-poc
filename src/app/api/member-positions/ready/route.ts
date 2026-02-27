@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 export async function GET() {
+  const check = await requirePermission("approve_positions");
+  if (!check.ok) return check.response;
   const today = new Date().toISOString().slice(0, 10);
 
   // 1. All non-qualified member positions

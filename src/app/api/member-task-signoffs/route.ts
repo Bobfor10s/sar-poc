@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requireAuth, requirePermission } from "@/lib/supabase/require-permission";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -107,6 +108,9 @@ async function checkPositionRequirements(member_id: string, position_id: string)
 }
 
 export async function GET(req: Request) {
+  const check = await requireAuth();
+  if (!check.ok) return check.response;
+
   const url = new URL(req.url);
   const member_id = (url.searchParams.get("member_id") || "").trim();
   const position_id = (url.searchParams.get("position_id") || "").trim();
@@ -153,6 +157,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const check = await requirePermission("approve_positions");
+  if (!check.ok) return check.response;
+
   const body = await req.json().catch(() => ({}));
   const member_id = String(body.member_id ?? "").trim();
   const position_id = String(body.position_id ?? "").trim();

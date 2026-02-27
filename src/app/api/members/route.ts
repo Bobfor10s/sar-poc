@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 export async function GET() {
+  const check = await requirePermission("read_all");
+  if (!check.ok) return check.response;
   const today = new Date().toISOString().slice(0, 10);
 
   // Fetch everything in parallel
@@ -98,6 +101,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const check = await requirePermission("manage_members");
+  if (!check.ok) return check.response;
+
   const body = await req.json().catch(() => ({}));
 
   const first_name = String(body.first_name ?? "").trim();

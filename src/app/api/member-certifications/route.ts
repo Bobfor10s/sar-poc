@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requireAuth } from "@/lib/supabase/require-permission";
 
 export async function GET(req: Request) {
+  const authCheck = await requireAuth();
+  if (!authCheck.ok) return authCheck.response;
+
   const url = new URL(req.url);
   const member_id = url.searchParams.get("member_id") ?? "";
   const mode = (url.searchParams.get("mode") ?? "history").toLowerCase(); // history | current
@@ -36,9 +40,19 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  const authCheck = await requireAuth();
+  if (!authCheck.ok) return authCheck.response;
+
   const body = await req.json().catch(() => ({}));
 
   const member_id = String(body.member_id ?? "").trim();
+
+  // Allow if self (edit_own) OR has manage_courses permission
+  const isSelf = authCheck.auth.member.id === member_id;
+  const canManage = authCheck.auth.permissions.includes("manage_courses");
+  if (!isSelf && !canManage) {
+    return NextResponse.json({ error: "Permission denied: requires 'manage_courses'" }, { status: 403 });
+  }
   const course_id = String(body.course_id ?? "").trim();
   const completed_at = String(body.completed_at ?? "").trim(); // yyyy-mm-dd
   const expires_at = String(body.expires_at ?? "").trim();     // yyyy-mm-dd

@@ -14,9 +14,17 @@ type ReadyRow = {
 };
 
 export default function ApprovalsPage() {
+  const [authPerms, setAuthPerms] = useState<string[] | null>(null);
   const [rows, setRows] = useState<ReadyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setAuthPerms(json?.user?.permissions ?? []))
+      .catch(() => setAuthPerms([]));
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -48,6 +56,17 @@ export default function ApprovalsPage() {
     } finally {
       setBusy("");
     }
+  }
+
+  if (authPerms !== null && !authPerms.includes("approve_positions")) {
+    return (
+      <main style={{ padding: 24, fontFamily: "system-ui" }}>
+        <h1>Pending Approvals</h1>
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid #fca5a5", borderRadius: 8, background: "#fef2f2", color: "#b91c1c" }}>
+          Access denied — requires <strong>approve_positions</strong> permission.
+        </div>
+      </main>
+    );
   }
 
   return (

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 async function getIdFromCtx(ctx: any): Promise<string> {
   const p = ctx?.params;
@@ -26,6 +27,9 @@ async function fetchAttendanceList(call_id: string) {
 }
 
 export async function GET(_req: Request, ctx: any) {
+  const check = await requirePermission("read_all");
+  if (!check.ok) return check.response;
+
   const call_id = await getIdFromCtx(ctx);
 
   if (!call_id || !isUuid(call_id)) {
@@ -46,6 +50,9 @@ export async function GET(_req: Request, ctx: any) {
  * Backward compatible with manual time_in/time_out passed in body.
  */
 export async function POST(req: Request, ctx: any) {
+  const check = await requirePermission("manage_calls");
+  if (!check.ok) return check.response;
+
   const call_id = await getIdFromCtx(ctx);
 
   if (!call_id || !isUuid(call_id)) {

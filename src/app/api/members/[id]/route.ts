@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requireAuth, requirePermission } from "@/lib/supabase/require-permission";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -8,10 +9,20 @@ function isUuid(v: string) {
 }
 
 export async function GET(_req: Request, ctx: Ctx) {
+  const authCheck = await requireAuth();
+  if (!authCheck.ok) return authCheck.response;
+
   const { id } = await ctx.params;
 
   if (!id || !isUuid(id)) {
     return NextResponse.json({ error: `bad member id: ${id || "(missing)"}` }, { status: 400 });
+  }
+
+  // Allow if self or has read_all permission
+  const isSelf = authCheck.auth.member.id === id;
+  const canReadAll = authCheck.auth.permissions.includes("read_all");
+  if (!isSelf && !canReadAll) {
+    return NextResponse.json({ error: "Permission denied" }, { status: 403 });
   }
 
   const { data, error } = await supabaseDb
@@ -25,6 +36,9 @@ export async function GET(_req: Request, ctx: Ctx) {
 }
 
 export async function PATCH(req: Request, ctx: Ctx) {
+  const authCheck = await requireAuth();
+  if (!authCheck.ok) return authCheck.response;
+
   const { id } = await ctx.params;
 
   if (!id || !isUuid(id)) {
@@ -32,6 +46,41 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 
   const body = await req.json().catch(() => ({}));
+
+  // Handle admin-only status toggle
+  if (body.toggle_status === true) {
+    const canToggle = authCheck.auth.permissions.includes("edit_status");
+    if (!canToggle) {
+      return NextResponse.json({ error: "Permission denied: requires 'edit_status'" }, { status: 403 });
+    }
+    const { data: current, error: fetchErr } = await supabaseDb
+      .from("members")
+      .select("status")
+      .eq("id", id)
+      .single();
+    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+
+    const now = new Date().toISOString();
+    const newStatus = current?.status === "inactive" ? "active" : "inactive";
+    const dateField = newStatus === "inactive" ? "deactivated_at" : "reactivated_at";
+
+    const { data, error } = await supabaseDb
+      .from("members")
+      .update({ status: newStatus, [dateField]: now })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data });
+  }
+
+  // Contact edit: allow if self (has edit_own) OR has edit_contact
+  const isSelf = authCheck.auth.member.id === id;
+  const canEditContact = authCheck.auth.permissions.includes("edit_contact");
+  if (!isSelf && !canEditContact) {
+    return NextResponse.json({ error: "Permission denied: requires 'edit_contact'" }, { status: 403 });
+  }
 
   const fields = [
     "first_name",
@@ -43,7 +92,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
     "city",
     "state",
     "postal_code",
-    "status",
     "joined_at",
   ];
 
@@ -105,6 +153,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
 }
 
 export async function DELETE(req: Request, ctx: Ctx) {
+  const check = await requirePermission("manage_members");
+  if (!check.ok) return check.response;
+
   const { id } = await ctx.params;
 
   if (!id || !isUuid(id)) {

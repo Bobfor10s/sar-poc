@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -18,6 +19,9 @@ const STATUS_ALLOWED = new Set(["scheduled", "completed", "cancelled", "archived
 const VIS_ALLOWED = new Set(["members", "public"]);
 
 export async function GET(_req: Request, ctx: any) {
+  const check = await requirePermission("read_all");
+  if (!check.ok) return check.response;
+
   const id = await getIdFromCtx(ctx);
 
   if (!id || !isUuid(id)) {
@@ -35,6 +39,9 @@ export async function GET(_req: Request, ctx: any) {
 }
 
 export async function PATCH(req: Request, ctx: any) {
+  const check = await requirePermission("manage_meetings");
+  if (!check.ok) return check.response;
+
   const id = await getIdFromCtx(ctx);
 
   if (!id || !isUuid(id)) {
@@ -81,6 +88,9 @@ export async function PATCH(req: Request, ctx: any) {
 }
 
 export async function DELETE(_req: Request, ctx: any) {
+  const check = await requirePermission("manage_meetings");
+  if (!check.ok) return check.response;
+
   const id = await getIdFromCtx(ctx);
 
   if (!id || !isUuid(id)) {

@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
+import { requireAuth } from "@/lib/supabase/require-permission";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
 export async function GET(req: Request) {
+  const check = await requireAuth();
+  if (!check.ok) return check.response;
+
   const url = new URL(req.url);
   const training_session_id = (url.searchParams.get("training_session_id") || "").trim();
   const course_id = (url.searchParams.get("course_id") || "").trim();

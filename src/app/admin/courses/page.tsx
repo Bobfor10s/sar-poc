@@ -26,9 +26,17 @@ type EditRow = {
 };
 
 export default function CoursesAdminPage() {
+  const [authPerms, setAuthPerms] = useState<string[] | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [edits, setEdits] = useState<Record<string, EditRow>>({});
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setAuthPerms(json?.user?.permissions ?? []))
+      .catch(() => setAuthPerms([]));
+  }, []);
 
   const [form, setForm] = useState({
     code: "",
@@ -237,6 +245,17 @@ export default function CoursesAdminPage() {
     } else {
       setRow(id, { never_expires: false });
     }
+  }
+
+  if (authPerms !== null && !authPerms.includes("manage_courses")) {
+    return (
+      <main style={{ padding: 24, fontFamily: "system-ui" }}>
+        <h1>Courses (Admin)</h1>
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid #fca5a5", borderRadius: 8, background: "#fef2f2", color: "#b91c1c" }}>
+          Access denied — requires <strong>manage_courses</strong> permission.
+        </div>
+      </main>
+    );
   }
 
   return (

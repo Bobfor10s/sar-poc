@@ -41,10 +41,18 @@ type PositionDetail = {
 };
 
 export default function AdminPositionsPage() {
+  const [authPerms, setAuthPerms] = useState<string[] | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setAuthPerms(json?.user?.permissions ?? []))
+      .catch(() => setAuthPerms([]));
+  }, []);
 
   // Create position form
   const [newPos, setNewPos] = useState({ code: "", name: "", level: "", position_type: "" });
@@ -233,6 +241,17 @@ export default function AdminPositionsPage() {
     if (r.req_kind === "position") return `Prereq position: ${r.required_position?.code ?? "?"} — ${r.required_position?.name ?? ""}`;
     if (r.req_kind === "task") return `Task: ${r.tasks?.task_code ?? "?"} — ${r.tasks?.task_name ?? ""}`;
     return r.req_kind;
+  }
+
+  if (authPerms !== null && !authPerms.includes("manage_positions")) {
+    return (
+      <main style={{ padding: 24, fontFamily: "system-ui" }}>
+        <h1>Admin — Positions</h1>
+        <div style={{ marginTop: 16, padding: 16, border: "1px solid #fca5a5", borderRadius: 8, background: "#fef2f2", color: "#b91c1c" }}>
+          Access denied — requires <strong>manage_positions</strong> permission.
+        </div>
+      </main>
+    );
   }
 
   return (
