@@ -361,16 +361,16 @@ export default function MembersPage() {
 
                     <td style={td}>
                       {!m.joined_at ? (
-                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #f0c040", borderRadius: 999, background: "#fffbe6", color: "#7a5a00" }}>
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #f0c040", borderRadius: 999, background: "#fffbe6", color: "#7a5a00", display: "inline-block", minWidth: 66, textAlign: "center" }}>
                           Applicant
                         </span>
                       ) : (m.status ?? "active").toLowerCase() === "inactive" ? (
-                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #fca5a5", borderRadius: 999, background: "#fef2f2", color: "#991b1b" }}>
-                          inactive
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #fca5a5", borderRadius: 999, background: "#fef2f2", color: "#991b1b", display: "inline-block", minWidth: 66, textAlign: "center" }}>
+                          Inactive
                         </span>
                       ) : (
-                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #86efac", borderRadius: 999, background: "#f0fdf4", color: "#166534" }}>
-                          {(m.status ?? "active").toLowerCase()}
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #86efac", borderRadius: 999, background: "#f0fdf4", color: "#166534", display: "inline-block", minWidth: 66, textAlign: "center" }}>
+                          Active
                         </span>
                       )}
                     </td>
