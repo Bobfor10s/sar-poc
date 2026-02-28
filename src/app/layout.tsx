@@ -14,9 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body style={{ display: "flex", minHeight: "100vh", margin: 0 }}>
         <Nav />
-        {children}
+        <div style={{ flex: 1, overflowY: "auto" }}>{children}</div>
       </body>
     </html>
   );

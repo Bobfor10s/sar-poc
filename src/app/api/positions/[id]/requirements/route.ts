@@ -72,11 +72,11 @@ export async function POST(req: Request, ctx: any) {
   const body = await req.json().catch(() => ({}));
   const req_kind = String(body.req_kind ?? "").trim().toLowerCase();
 
-  if (!["course", "position", "task"].includes(req_kind)) {
-    return NextResponse.json({ error: "req_kind must be course, position, or task" }, { status: 400 });
+  if (!["course", "position", "task", "time"].includes(req_kind)) {
+    return NextResponse.json({ error: "req_kind must be course, position, task, or time" }, { status: 400 });
   }
 
-  const payload: Record<string, any> = {
+  const payload: Record<string, string | number | null> = {
     position_id,
     req_kind,
     notes: body.notes ? String(body.notes).trim() : null,
@@ -100,6 +100,21 @@ export async function POST(req: Request, ctx: any) {
       return NextResponse.json({ error: "task_id required for req_kind=task" }, { status: 400 });
     }
     payload.task_id = task_id;
+  } else if (req_kind === "time") {
+    const min_count = Number(body.min_count);
+    if (!Number.isFinite(min_count) || min_count < 1) {
+      return NextResponse.json({ error: "min_count must be a positive integer for req_kind=time" }, { status: 400 });
+    }
+    payload.min_count = Math.round(min_count);
+    const activity_type = String(body.activity_type ?? "any").trim();
+    if (!["training", "call", "any"].includes(activity_type)) {
+      return NextResponse.json({ error: "activity_type must be training, call, or any" }, { status: 400 });
+    }
+    payload.activity_type = activity_type;
+    if (body.within_months !== undefined && body.within_months !== null && body.within_months !== "") {
+      const within_months = Number(body.within_months);
+      if (Number.isFinite(within_months) && within_months > 0) payload.within_months = Math.round(within_months);
+    }
   }
 
   const { data, error } = await supabaseDb

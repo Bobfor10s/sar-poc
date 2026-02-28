@@ -2,15 +2,22 @@ import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requirePermission } from "@/lib/supabase/require-permission";
 
-export async function GET() {
+export async function GET(req: Request) {
   const check = await requirePermission("read_all");
   if (!check.ok) return check.response;
-  const { data, error } = await supabaseDb
+
+  const url = new URL(req.url);
+  const all = url.searchParams.get("all") === "true";
+
+  let query = supabaseDb
     .from("positions")
     .select("*")
-    .eq("is_active", true)
     .order("position_type", { ascending: false })
     .order("code", { ascending: true });
+
+  if (!all) query = query.eq("is_active", true);
+
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data: data ?? [] });

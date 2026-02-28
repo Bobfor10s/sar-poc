@@ -30,12 +30,11 @@ export default function Nav() {
       .catch(() => setUser(null));
   }, [pathname]);
 
-  // Hide nav entirely on login page
-  if (pathname === "/login") return null;
+  // Hide nav on login and portal pages
+  if (pathname === "/login" || pathname.startsWith("/portal")) return null;
 
   const perms = new Set(user?.permissions ?? []);
 
-  // General links — requires read_all (Members always visible as self-access)
   const generalLinks = [
     { href: "/members", label: "Members", always: true },
     { href: "/calls", label: "Calls", perm: "read_all" },
@@ -44,14 +43,19 @@ export default function Nav() {
     { href: "/events", label: "Events", perm: "read_all" },
   ];
 
-  // Admin links — require specific permissions
+  const positionsLinks = [
+    { href: "/positions", label: "Positions", perm: "read_all" },
+    { href: "/courses", label: "Courses", perm: "read_all" },
+    { href: "/tasks", label: "Tasks", perm: "read_all" },
+  ];
+
   const adminLinks = [
-    { href: "/admin/courses", label: "Courses", perm: "manage_courses" },
-    { href: "/admin/positions", label: "Positions", perm: "manage_positions" },
     { href: "/admin/approvals", label: "Approvals", perm: "approve_positions" },
+    { href: "/admin/settings", label: "Settings", perm: "manage_members" },
   ];
 
   const visibleGeneral = generalLinks.filter((l) => l.always || !l.perm || perms.has(l.perm));
+  const visiblePositions = positionsLinks.filter((l) => !l.perm || perms.has(l.perm));
   const visibleAdmin = adminLinks.filter((l) => !l.perm || perms.has(l.perm));
 
   async function handleLogout() {
@@ -62,74 +66,84 @@ export default function Nav() {
 
   const roleBadge = user ? (ROLE_BADGE_COLORS[user.role] ?? ROLE_BADGE_COLORS.member) : null;
 
+  function navLink(href: string, label: string, indent = false) {
+    const active = pathname === href || pathname.startsWith(href + "/");
+    return (
+      <Link
+        key={href}
+        href={href}
+        style={{
+          display: "block",
+          padding: indent ? "5px 10px 5px 20px" : "6px 10px",
+          borderRadius: 6,
+          textDecoration: "none",
+          background: active ? "#cbd5e1" : "transparent",
+          color: active ? "#1e3a5f" : "#374151",
+          fontWeight: active ? 600 : 400,
+          fontSize: 14,
+        }}
+      >
+        {label}
+      </Link>
+    );
+  }
+
   return (
     <nav
       style={{
-        display: "flex",
-        gap: 8,
-        flexWrap: "wrap",
-        padding: "10px 16px",
-        borderBottom: "1px solid #94a3b8",
+        width: 220,
+        minHeight: "100vh",
         background: "#e2e8f0",
+        borderRight: "1px solid #94a3b8",
         fontFamily: "system-ui",
-        alignItems: "center",
+        display: "flex",
+        flexDirection: "column",
+        flexShrink: 0,
+        padding: "0 8px",
+        boxSizing: "border-box",
       }}
     >
-      {visibleGeneral.map((l) => {
-        const active = pathname === l.href || pathname.startsWith(l.href + "/");
-        return (
-          <Link
-            key={l.href}
-            href={l.href}
-            style={{
-              padding: "6px 12px",
-              borderRadius: 8,
-              textDecoration: "none",
-              border: "1px solid #94a3b8",
-              background: active ? "#cbd5e1" : "#f8fafc",
-              color: "#1f2937",
-              fontWeight: active ? 600 : 400,
-              fontSize: 14,
-            }}
-          >
-            {l.label}
-          </Link>
-        );
-      })}
+      {/* App name */}
+      <div style={{ padding: "16px 10px 12px", borderBottom: "1px solid #94a3b8", marginBottom: 8 }}>
+        <span style={{ fontWeight: 700, fontSize: 16, color: "#1e3a5f" }}>SAR POC</span>
+      </div>
 
+      {/* General links */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {visibleGeneral.map((l) => navLink(l.href, l.label))}
+      </div>
+
+      {/* Positions section */}
+      {visiblePositions.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase", padding: "4px 10px 6px" }}>
+            Positions
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {visiblePositions.map((l) => navLink(l.href, l.label, true))}
+          </div>
+        </div>
+      )}
+
+      {/* Admin section */}
       {visibleAdmin.length > 0 && (
-        <>
-          <span style={{ opacity: 0.35, fontSize: 14 }}>|</span>
-          {visibleAdmin.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(l.href + "/");
-            return (
-              <Link
-                key={l.href}
-                href={l.href}
-                style={{
-                  padding: "6px 12px",
-                  borderRadius: 8,
-                  textDecoration: "none",
-                  border: "1px solid #94a3b8",
-                  background: active ? "#cbd5e1" : "#f8fafc",
-                  color: "#1f2937",
-                  fontWeight: active ? 600 : 400,
-                  fontSize: 14,
-                }}
-              >
-                {l.label}
-              </Link>
-            );
-          })}
-        </>
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase", padding: "4px 10px 6px" }}>
+            Admin
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {visibleAdmin.map((l) => navLink(l.href, l.label, true))}
+          </div>
+        </div>
       )}
 
       {/* Spacer */}
       <div style={{ flex: 1 }} />
 
+      {/* User info */}
       {user && (
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "#374151" }}>{user.name}</span>
+        <div style={{ borderTop: "1px solid #94a3b8", padding: "12px 10px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{user.name}</span>
           {roleBadge && (
             <span
               style={{
@@ -141,6 +155,7 @@ export default function Nav() {
                 color: roleBadge.color,
                 fontWeight: 700,
                 textTransform: "capitalize",
+                alignSelf: "flex-start",
               }}
             >
               {user.role}
@@ -156,6 +171,7 @@ export default function Nav() {
               color: "#374151",
               fontSize: 13,
               cursor: "pointer",
+              textAlign: "left",
             }}
           >
             Sign out

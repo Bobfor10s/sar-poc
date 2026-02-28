@@ -15,6 +15,25 @@ async function getIdFromCtx(ctx: any): Promise<string> {
   return "";
 }
 
+export async function GET(_req: Request, ctx: any) {
+  const check = await requirePermission("read_all");
+  if (!check.ok) return check.response;
+
+  const id = await getIdFromCtx(ctx);
+  if (!id || !isUuid(id)) {
+    return NextResponse.json({ error: `bad course id: ${id || "(missing)"}` }, { status: 400 });
+  }
+
+  const { data, error } = await supabaseDb
+    .from("courses")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: error.code === "PGRST116" ? 404 : 500 });
+  return NextResponse.json({ data });
+}
+
 export async function PATCH(req: Request, ctx: any) {
   const check = await requirePermission("manage_courses");
   if (!check.ok) return check.response;

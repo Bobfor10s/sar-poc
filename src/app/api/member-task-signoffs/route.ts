@@ -141,6 +141,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ data: data ?? [] });
   }
 
+  // Mode 2b: by task_id — return all signoffs for a task (for task detail page)
+  const task_id_filter = (url.searchParams.get("task_id") || "").trim();
+  if (task_id_filter) {
+    if (!isUuid(task_id_filter)) return NextResponse.json({ error: "bad task_id" }, { status: 400 });
+    const { data, error } = await supabaseDb
+      .from("member_task_signoffs")
+      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, members:member_id(first_name, last_name)")
+      .eq("task_id", task_id_filter)
+      .order("signed_at", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data: data ?? [] });
+  }
+
   // Mode 3: by member_id + position_id (original behaviour)
   if (!member_id || !isUuid(member_id)) return NextResponse.json({ error: "bad member_id" }, { status: 400 });
   if (!position_id || !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
