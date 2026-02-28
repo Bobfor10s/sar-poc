@@ -24,7 +24,7 @@ export async function GET(_req: Request, ctx: any) {
 
   const { data, error } = await supabaseDb
     .from("position_tasks")
-    .select("id, task_code, task_name, description, is_active, is_global, position_id, positions:position_id(id, code, name)")
+    .select("id, task_code, task_name, description, is_active")
     .eq("id", id)
     .single();
 
@@ -46,8 +46,6 @@ export async function PATCH(req: Request, ctx: any) {
   if (body.task_name !== undefined) payload.task_name = String(body.task_name).trim();
   if (body.description !== undefined) payload.description = body.description ? String(body.description).trim() : null;
   if (body.is_active !== undefined) payload.is_active = !!body.is_active;
-  if (body.is_global !== undefined) payload.is_global = !!body.is_global;
-  if (body.position_id !== undefined) payload.position_id = body.position_id ? String(body.position_id).trim() : null;
 
   if ("task_code" in payload && !payload.task_code) {
     return NextResponse.json({ error: "task_code cannot be empty" }, { status: 400 });
@@ -60,7 +58,7 @@ export async function PATCH(req: Request, ctx: any) {
     .from("position_tasks")
     .update(payload)
     .eq("id", id)
-    .select("id, task_code, task_name, description, is_active, is_global, position_id, positions:position_id(id, code, name)")
+    .select("id, task_code, task_name, description, is_active")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

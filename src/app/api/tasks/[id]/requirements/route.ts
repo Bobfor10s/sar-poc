@@ -26,7 +26,7 @@ export async function GET(_req: Request, ctx: any) {
 
   const { data, error } = await supabaseDb
     .from("task_requirements")
-    .select("*")
+    .select("*, courses:course_id(id, code, name)")
     .eq("task_id", task_id)
     .order("created_at", { ascending: true });
 
@@ -46,8 +46,8 @@ export async function POST(req: Request, ctx: any) {
   const body = await req.json().catch(() => ({}));
   const req_kind = String(body.req_kind ?? "").trim().toLowerCase();
 
-  if (!["time", "proficiency"].includes(req_kind)) {
-    return NextResponse.json({ error: "req_kind must be 'time' or 'proficiency'" }, { status: 400 });
+  if (!["course", "time"].includes(req_kind)) {
+    return NextResponse.json({ error: "req_kind must be 'course' or 'time'" }, { status: 400 });
   }
 
   const payload: Record<string, string | number | null> = {
@@ -55,6 +55,14 @@ export async function POST(req: Request, ctx: any) {
     req_kind,
     notes: body.notes ? String(body.notes).trim() : null,
   };
+
+  if (req_kind === "course") {
+    const course_id = String(body.course_id ?? "").trim();
+    if (!course_id || !isUuid(course_id)) {
+      return NextResponse.json({ error: "course_id required for req_kind=course" }, { status: 400 });
+    }
+    payload.course_id = course_id;
+  }
 
   if (req_kind === "time") {
     const min_hours = Number(body.min_hours);
@@ -80,7 +88,7 @@ export async function POST(req: Request, ctx: any) {
   const { data, error } = await supabaseDb
     .from("task_requirements")
     .insert(payload)
-    .select("*")
+    .select("*, courses:course_id(id, code, name)")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -102,7 +110,6 @@ export async function DELETE(req: Request, ctx: any) {
     return NextResponse.json({ error: "req_id query param required" }, { status: 400 });
   }
 
-  // Verify it belongs to this task
   const { data: existing, error: findErr } = await supabaseDb
     .from("task_requirements")
     .select("id")

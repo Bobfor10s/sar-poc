@@ -10,20 +10,20 @@ type TaskDetail = {
   task_name: string;
   description?: string | null;
   is_active: boolean;
-  is_global: boolean;
-  position_id?: string | null;
-  positions?: { id: string; code: string; name: string } | null;
 };
 
 type TaskReq = {
   id: string;
-  req_kind: "time" | "proficiency";
+  req_kind: "course" | "time";
+  course_id?: string | null;
+  courses?: { id: string; code: string; name: string } | null;
   min_hours?: number | null;
   within_months?: number | null;
   activity_type?: string | null;
   notes?: string | null;
-  created_at: string;
 };
+
+type Course = { id: string; code: string; name: string };
 
 type Signoff = {
   id: string;
@@ -41,14 +41,15 @@ export default function TaskDetailPage() {
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [edit, setEdit] = useState<Partial<TaskDetail>>({});
   const [reqs, setReqs] = useState<TaskReq[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [signoffs, setSignoffs] = useState<Signoff[]>([]);
 
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
 
-  // Requirement add form
   const [reqForm, setReqForm] = useState({
-    req_kind: "time",
+    req_kind: "course",
+    course_id: "",
     min_hours: "",
     within_months: "",
     activity_type: "any",
@@ -57,9 +58,10 @@ export default function TaskDetailPage() {
 
   async function load() {
     if (!taskId) return;
-    const [taskRes, reqsRes, signoffsRes] = await Promise.all([
+    const [taskRes, reqsRes, coursesRes, soRes] = await Promise.all([
       fetch(`/api/tasks/${taskId}`),
       fetch(`/api/tasks/${taskId}/requirements`),
+      fetch("/api/courses"),
       fetch(`/api/member-task-signoffs?task_id=${taskId}`),
     ]);
 
@@ -69,11 +71,9 @@ export default function TaskDetailPage() {
       setEdit(taskJson.data);
     }
 
-    const reqsJson = await reqsRes.json().catch(() => ({}));
-    setReqs(reqsJson.data ?? []);
-
-    const soJson = await signoffsRes.json().catch(() => ({}));
-    setSignoffs(soJson.data ?? []);
+    setReqs((await reqsRes.json().catch(() => ({}))).data ?? []);
+    setCourses((await coursesRes.json().catch(() => ({}))).data ?? []);
+    setSignoffs((await soRes.json().catch(() => ({}))).data ?? []);
   }
 
   useEffect(() => { load(); }, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -100,7 +100,6 @@ export default function TaskDetailPage() {
 
   async function addReq(e: React.FormEvent) {
     e.preventDefault();
-    if (reqForm.req_kind === "time" && !reqForm.min_hours) return;
     setBusy("req");
     setMsg("");
     try {
@@ -108,6 +107,9 @@ export default function TaskDetailPage() {
         req_kind: reqForm.req_kind,
         notes: reqForm.notes || undefined,
       };
+      if (reqForm.req_kind === "course") {
+        body.course_id = reqForm.course_id;
+      }
       if (reqForm.req_kind === "time") {
         body.min_hours = Number(reqForm.min_hours);
         body.activity_type = reqForm.activity_type;
@@ -119,9 +121,9 @@ export default function TaskDetailPage() {
         body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) { setMsg(json?.error ?? "Add requirement failed"); return; }
+      if (!res.ok) { setMsg(json?.error ?? "Add failed"); return; }
       setReqs((prev) => [...prev, json.data]);
-      setReqForm({ req_kind: "time", min_hours: "", within_months: "", activity_type: "any", notes: "" });
+      setReqForm({ req_kind: "course", course_id: "", min_hours: "", within_months: "", activity_type: "any", notes: "" });
       setMsg("Requirement added.");
     } finally {
       setBusy("");
@@ -131,39 +133,49 @@ export default function TaskDetailPage() {
   async function removeReq(req_id: string) {
     if (!confirm("Remove this requirement?")) return;
     setBusy("req-del");
-    setMsg("");
     try {
       const res = await fetch(`/api/tasks/${taskId}/requirements?req_id=${req_id}`, { method: "DELETE" });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) { setMsg(json?.error ?? "Remove failed"); return; }
+      if (!res.ok) { const j = await res.json().catch(() => ({})); setMsg(j?.error ?? "Remove failed"); return; }
       setReqs((prev) => prev.filter((r) => r.id !== req_id));
-      setMsg("Requirement removed.");
+      setMsg("");
     } finally {
       setBusy("");
     }
   }
 
   function reqLabel(r: TaskReq): string {
-    if (r.req_kind === "time") {
-      const type = r.activity_type ?? "any";
-      const hrs = r.min_hours ?? 0;
-      const win = r.within_months ? ` within ${r.within_months} months` : "";
-      const typeLabel = type === "training" ? "training" : type === "call" ? "calls" : "any activity";
-      return `${hrs} hour${hrs !== 1 ? "s" : ""} in ${typeLabel}${win}`;
+    if (r.req_kind === "course") {
+      const c = r.courses;
+      return c ? `${c.code} — ${c.name}` : "Unknown course";
     }
-    if (r.req_kind === "proficiency") {
-      return `Proficiency sign-off${r.notes ? `: ${r.notes}` : ""}`;
+    if (r.req_kind === "time") {
+      const hrs = r.min_hours ?? 0;
+      const type = r.activity_type === "training" ? "training" : r.activity_type === "call" ? "calls" : "any activity";
+      const win = r.within_months ? ` within ${r.within_months} months` : "";
+      return `${hrs} hr${hrs !== 1 ? "s" : ""} in ${type}${win}`;
     }
     return r.req_kind;
   }
 
-  const pos = task?.positions as { id: string; code: string; name: string } | null | undefined;
+  // Summary line: "Requires CPR + 4 hrs training + approval"
+  const reqSummary = (() => {
+    const parts: string[] = [];
+    for (const r of reqs) {
+      if (r.req_kind === "course") parts.push(r.courses?.code ?? "course");
+      if (r.req_kind === "time") {
+        const type = r.activity_type === "training" ? "training" : r.activity_type === "call" ? "call" : "activity";
+        parts.push(`${r.min_hours}h ${type}`);
+      }
+    }
+    parts.push("approval");
+    return parts.join(" + ");
+  })();
 
   if (!task) return <div style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</div>;
 
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 800 }}>
-      <p><Link href="/tasks">← Tasks</Link></p>
+    <div style={{ padding: 24, fontFamily: "system-ui", maxWidth: 700 }}>
+      <p><Link href="/tasks">← Skills</Link></p>
 
       {msg && (
         <div style={{ marginBottom: 12, padding: 10, border: "1px solid #eee", borderRadius: 8, background: "#fafafa" }}>
@@ -177,11 +189,11 @@ export default function TaskDetailPage() {
         <form onSubmit={saveTask} style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
             <div>
-              <label style={labelStyle}>Task code</label>
+              <label style={labelStyle}>Code</label>
               <input style={inputStyle} value={edit.task_code ?? ""} onChange={(e) => setEdit({ ...edit, task_code: e.target.value })} required />
             </div>
             <div>
-              <label style={labelStyle}>Task name</label>
+              <label style={labelStyle}>Name</label>
               <input style={inputStyle} value={edit.task_name ?? ""} onChange={(e) => setEdit({ ...edit, task_name: e.target.value })} required />
             </div>
           </div>
@@ -189,21 +201,10 @@ export default function TaskDetailPage() {
             <label style={labelStyle}>Description</label>
             <input style={inputStyle} value={edit.description ?? ""} onChange={(e) => setEdit({ ...edit, description: e.target.value || null })} placeholder="Optional" />
           </div>
-          <div style={{ display: "flex", gap: 16 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={edit.is_active ?? true} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} />
-              Active
-            </label>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
-              <input type="checkbox" checked={edit.is_global ?? false} onChange={(e) => setEdit({ ...edit, is_global: e.target.checked })} />
-              Global (not position-specific)
-            </label>
-          </div>
-          {pos && !edit.is_global && (
-            <div style={{ fontSize: 13, opacity: 0.7 }}>
-              Position: <Link href={`/positions/${pos.id}`} style={{ color: "#1e40af" }}>{pos.code} — {pos.name}</Link>
-            </div>
-          )}
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={edit.is_active ?? true} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} />
+            Active
+          </label>
           <div>
             <button type="submit" disabled={busy === "save"} style={btnStyle}>
               {busy === "save" ? "Saving…" : "Save"}
@@ -216,16 +217,28 @@ export default function TaskDetailPage() {
       <section style={sectionStyle}>
         <h2 style={h2}>How to Earn This Skill</h2>
 
+        {/* Summary pill */}
+        <div style={{ marginBottom: 14, padding: "8px 12px", background: "#f0f4ff", border: "1px solid #c7d2fe", borderRadius: 8, fontSize: 13, color: "#3730a3" }}>
+          <strong>Earn by:</strong> {reqSummary}
+        </div>
+
         {reqs.length === 0 ? (
-          <p style={muted}>No requirements defined — add one below.</p>
+          <p style={muted}>No prerequisites — approval only.</p>
         ) : (
-          <div style={{ display: "grid", gap: 4, marginBottom: 12 }}>
+          <div style={{ display: "grid", gap: 4, marginBottom: 14 }}>
             {reqs.map((r) => (
-              <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "6px 0", borderBottom: "1px solid #f0f0f0" }}>
-                <span style={{ flex: 1, fontSize: 13 }}>
-                  <strong>{r.req_kind === "time" ? "Time" : "Proficiency"}:</strong>{" "}
-                  {reqLabel(r)}
+              <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderBottom: "1px solid #f0f0f0" }}>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, marginRight: 4,
+                  background: r.req_kind === "course" ? "#ecfdf5" : "#eff6ff",
+                  border: r.req_kind === "course" ? "1px solid #6ee7b7" : "1px solid #93c5fd",
+                  color: r.req_kind === "course" ? "#065f46" : "#1e40af",
+                  textTransform: "uppercase",
+                }}>
+                  {r.req_kind === "course" ? "Class" : "Time"}
                 </span>
+                <span style={{ flex: 1, fontSize: 13 }}>{reqLabel(r)}</span>
+                {r.notes && <span style={muted}>· {r.notes}</span>}
                 <button
                   type="button"
                   onClick={() => removeReq(r.id)}
@@ -239,60 +252,73 @@ export default function TaskDetailPage() {
           </div>
         )}
 
+        {/* Add requirement */}
         <form onSubmit={addReq} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <select
             value={reqForm.req_kind}
-            onChange={(e) => setReqForm({ ...reqForm, req_kind: e.target.value, min_hours: "", within_months: "", notes: "" })}
-            style={{ fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd" }}
+            onChange={(e) => setReqForm({ ...reqForm, req_kind: e.target.value, course_id: "", min_hours: "", within_months: "" })}
+            style={selectStyle}
           >
+            <option value="course">Class / Course</option>
             <option value="time">Time in activity</option>
-            <option value="proficiency">Proficiency sign-off</option>
           </select>
+
+          {reqForm.req_kind === "course" && (
+            <select
+              value={reqForm.course_id}
+              onChange={(e) => setReqForm({ ...reqForm, course_id: e.target.value })}
+              style={{ ...selectStyle, flex: 1, minWidth: 160 }}
+              required
+            >
+              <option value="">Select course…</option>
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+              ))}
+            </select>
+          )}
 
           {reqForm.req_kind === "time" && (
             <>
               <input
                 type="number"
-                placeholder="Hours required"
+                placeholder="Hours"
                 min={0.5}
                 step={0.5}
                 value={reqForm.min_hours}
                 onChange={(e) => setReqForm({ ...reqForm, min_hours: e.target.value })}
-                style={{ width: 120, fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd" }}
+                style={{ width: 80, ...selectStyle }}
                 required
               />
               <select
                 value={reqForm.activity_type}
                 onChange={(e) => setReqForm({ ...reqForm, activity_type: e.target.value })}
-                style={{ fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd" }}
+                style={selectStyle}
               >
                 <option value="any">Any activity</option>
-                <option value="training">Training only</option>
-                <option value="call">Calls only</option>
+                <option value="training">Training</option>
+                <option value="call">Calls</option>
               </select>
               <input
                 type="number"
-                placeholder="Within months (opt)"
+                placeholder="Within months"
                 min={1}
                 value={reqForm.within_months}
                 onChange={(e) => setReqForm({ ...reqForm, within_months: e.target.value })}
-                style={{ width: 160, fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd" }}
+                style={{ width: 130, ...selectStyle }}
               />
             </>
           )}
 
-          {reqForm.req_kind === "proficiency" && (
-            <input
-              placeholder="Criteria / notes (optional)"
-              value={reqForm.notes}
-              onChange={(e) => setReqForm({ ...reqForm, notes: e.target.value })}
-              style={{ flex: 1, minWidth: 200, fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd" }}
-            />
-          )}
+          <input
+            placeholder="Notes (opt)"
+            value={reqForm.notes}
+            onChange={(e) => setReqForm({ ...reqForm, notes: e.target.value })}
+            style={{ width: 120, ...selectStyle }}
+          />
 
           <button
             type="submit"
-            disabled={busy === "req" || (reqForm.req_kind === "time" && !reqForm.min_hours)}
+            disabled={busy === "req" || (reqForm.req_kind === "course" && !reqForm.course_id) || (reqForm.req_kind === "time" && !reqForm.min_hours)}
             style={{ fontSize: 13, padding: "6px 12px", borderRadius: 6, border: "1px solid #94a3b8", cursor: "pointer" }}
           >
             Add
@@ -300,11 +326,14 @@ export default function TaskDetailPage() {
         </form>
       </section>
 
-      {/* Members who earned this skill */}
+      {/* Members with sign-offs */}
       <section style={sectionStyle}>
-        <h2 style={h2}>Members with Sign-offs <span style={muted}>({signoffs.length})</span></h2>
+        <h2 style={h2}>
+          Approved Members{" "}
+          <span style={muted}>({signoffs.length})</span>
+        </h2>
         {signoffs.length === 0 ? (
-          <p style={muted}>No sign-offs recorded yet.</p>
+          <p style={muted}>No approvals recorded yet.</p>
         ) : (
           <ul style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
             {signoffs.map((s) => {
@@ -312,7 +341,7 @@ export default function TaskDetailPage() {
               const name = m ? `${m.first_name} ${m.last_name}` : s.member_id;
               return (
                 <li key={s.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0f0f0", fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ color: "#1a7f3c", fontSize: 14 }}>✓</span>
+                  <span style={{ color: "#1a7f3c" }}>✓</span>
                   <strong>{name}</strong>
                   <span style={muted}>{new Date(s.signed_at).toLocaleDateString()}</span>
                   {s.evaluator_name && <span style={muted}>· {s.evaluator_name}</span>}
@@ -332,4 +361,5 @@ const h2: React.CSSProperties = { marginTop: 0, marginBottom: 12, fontSize: 16, 
 const muted: React.CSSProperties = { fontSize: 12, opacity: 0.65 };
 const labelStyle: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 600, marginBottom: 4, opacity: 0.8 };
 const inputStyle: React.CSSProperties = { padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, width: "100%", boxSizing: "border-box" };
+const selectStyle: React.CSSProperties = { padding: "6px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13 };
 const btnStyle: React.CSSProperties = { padding: "7px 18px", borderRadius: 8, background: "#1e40af", color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer" };
