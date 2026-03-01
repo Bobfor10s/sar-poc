@@ -24,11 +24,12 @@ export async function GET() {
     .eq("status", "scheduled")
     .lte("start_dt", `${todayDate}T23:59:59.999Z`);
 
-  // Fetch active meetings
+  // Fetch active meetings: started but not cancelled/archived (end_dt checked by isActiveToday)
   const { data: meetings } = await supabaseDb
     .from("meetings")
     .select("id, title, incident_lat, incident_lng, incident_radius_m, start_dt, end_dt")
-    .eq("status", "scheduled")
+    .neq("status", "cancelled")
+    .neq("status", "archived")
     .lte("start_dt", `${todayDate}T23:59:59.999Z`);
 
   // Fetch active events

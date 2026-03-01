@@ -22,7 +22,8 @@ export async function GET() {
     supabaseDb
       .from("meetings")
       .select("id, title, start_dt, location_text")
-      .eq("status", "scheduled")
+      .neq("status", "cancelled")
+      .neq("status", "archived")
       .or(endFilter)
       .order("start_dt", { ascending: true })
       .limit(20),
