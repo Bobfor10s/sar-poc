@@ -217,7 +217,7 @@ export async function GET(req: Request) {
     if (!isUuid(training_session_id)) return NextResponse.json({ error: "bad training_session_id" }, { status: 400 });
     const { data, error } = await supabaseDb
       .from("member_task_signoffs")
-      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, call_id, training_session_id")
+      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, hours, call_id, training_session_id")
       .eq("training_session_id", training_session_id)
       .order("signed_at", { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -229,7 +229,7 @@ export async function GET(req: Request) {
     if (!isUuid(call_id)) return NextResponse.json({ error: "bad call_id" }, { status: 400 });
     const { data, error } = await supabaseDb
       .from("member_task_signoffs")
-      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, call_id, training_session_id")
+      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, hours, call_id, training_session_id")
       .eq("call_id", call_id)
       .order("signed_at", { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -242,7 +242,7 @@ export async function GET(req: Request) {
     if (!isUuid(task_id_filter)) return NextResponse.json({ error: "bad task_id" }, { status: 400 });
     const { data, error } = await supabaseDb
       .from("member_task_signoffs")
-      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, members:member_id(first_name, last_name)")
+      .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, hours, members:member_id(first_name, last_name)")
       .eq("task_id", task_id_filter)
       .order("signed_at", { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -255,7 +255,7 @@ export async function GET(req: Request) {
 
   let query = supabaseDb
     .from("member_task_signoffs")
-    .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, call_id, training_session_id")
+    .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, hours, call_id, training_session_id")
     .eq("member_id", member_id)
     .order("signed_at", { ascending: false });
 
@@ -325,6 +325,7 @@ export async function POST(req: Request) {
     evaluator_name: body.evaluator_name ? String(body.evaluator_name) : null,
     evaluator_position: body.evaluator_position ? String(body.evaluator_position) : null,
     notes: body.notes ? String(body.notes) : null,
+    hours: body.hours != null && body.hours !== "" ? Number(body.hours) : null,
     call_id,
     training_session_id,
   };

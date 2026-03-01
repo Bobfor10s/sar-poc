@@ -44,6 +44,7 @@ type CallSignoff = {
   task_id: string;
   evaluator_name?: string | null;
   notes?: string | null;
+  hours?: number | null;
   signed_at: string;
 };
 
@@ -114,7 +115,7 @@ export default function CallDetailPage() {
   const [savingRow, setSavingRow] = useState("");
 
   // Skill sign-off form
-  const [signoffForm, setSignoffForm] = useState({ member_id: "", task_id: "", evaluator_name: "", notes: "" });
+  const [signoffForm, setSignoffForm] = useState({ member_id: "", task_id: "", evaluator_name: "", notes: "", hours: "" });
   const [busySignoff, setBusySignoff] = useState(false);
   const [signoffMsg, setSignoffMsg] = useState("");
 
@@ -308,6 +309,7 @@ export default function CallDetailPage() {
           call_id: callId,
           evaluator_name: signoffForm.evaluator_name || undefined,
           notes: signoffForm.notes || undefined,
+          hours: signoffForm.hours ? Number(signoffForm.hours) : undefined,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -316,7 +318,7 @@ export default function CallDetailPage() {
       const soRes = await fetch(`/api/member-task-signoffs?call_id=${callId}`);
       const soJson = await soRes.json().catch(() => ({}));
       setCallSignoffs(soJson.data ?? []);
-      setSignoffForm((f) => ({ ...f, task_id: "", notes: "" }));
+      setSignoffForm((f) => ({ ...f, task_id: "", notes: "", hours: "" }));
       setSignoffMsg("Skill recorded.");
     } finally {
       setBusySignoff(false);
@@ -710,6 +712,9 @@ export default function CallDetailPage() {
                         {s.evaluator_name && (
                           <span style={{ fontSize: 12, opacity: 0.6 }}>by {s.evaluator_name}</span>
                         )}
+                        {s.hours != null && (
+                          <span style={{ fontSize: 12, opacity: 0.6 }}>· {s.hours}h</span>
+                        )}
                         {s.notes && <span style={{ fontSize: 12, opacity: 0.6 }}>· {s.notes}</span>}
                         <span style={{ fontSize: 12, opacity: 0.5 }}>{new Date(s.signed_at).toLocaleDateString()}</span>
                       </li>
@@ -758,6 +763,16 @@ export default function CallDetailPage() {
                   value={signoffForm.notes}
                   onChange={(e) => setSignoffForm((f) => ({ ...f, notes: e.target.value }))}
                   style={{ width: 120, ...selectStyle }}
+                />
+
+                <input
+                  type="number"
+                  min={0}
+                  step={0.25}
+                  placeholder="Hours (opt)"
+                  value={signoffForm.hours}
+                  onChange={(e) => setSignoffForm((f) => ({ ...f, hours: e.target.value }))}
+                  style={{ width: 90, ...selectStyle }}
                 />
 
                 <button

@@ -55,6 +55,7 @@ type SignoffRow = {
   evaluator_name?: string | null;
   signed_at: string;
   notes?: string | null;
+  hours?: number | null;
 };
 
 type SearchGroup = {
@@ -144,6 +145,7 @@ export default function TrainingDetailPage() {
   const [soTaskMapId, setSoTaskMapId] = useState(""); // selected task map row id
   const [soEvaluator, setSoEvaluator] = useState("");
   const [soNotes, setSoNotes] = useState("");
+  const [soHours, setSoHours] = useState("");
 
   // ── Search groups state ──
   const [groups, setGroups] = useState<SearchGroup[]>([]);
@@ -387,6 +389,7 @@ export default function TrainingDetailPage() {
           training_session_id: sessionId,
           evaluator_name: soEvaluator || null,
           notes: soNotes || null,
+          hours: soHours ? Number(soHours) : null,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -394,6 +397,7 @@ export default function TrainingDetailPage() {
       setSessionSignoffs((prev) => [json.data, ...prev]);
       setSoTaskMapId("");
       setSoNotes("");
+      setSoHours("");
     } catch (e: any) {
       alert(e?.message ?? String(e));
     } finally {
@@ -419,6 +423,7 @@ export default function TrainingDetailPage() {
               training_session_id: sessionId,
               evaluator_name: soEvaluator || null,
               notes: soNotes || null,
+              hours: soHours ? Number(soHours) : null,
             }),
           }).then((r) => r.json().catch(() => ({})))
         )
@@ -427,6 +432,7 @@ export default function TrainingDetailPage() {
       if (newSignoffs.length > 0) setSessionSignoffs((prev) => [...newSignoffs, ...prev]);
       setSoTaskMapId("");
       setSoNotes("");
+      setSoHours("");
     } catch (e: any) {
       alert(e?.message ?? String(e));
     } finally {
@@ -968,6 +974,19 @@ export default function TrainingDetailPage() {
                 <input style={inputStyle} value={soNotes} onChange={(e) => setSoNotes(e.target.value)} placeholder="Optional" />
               </div>
 
+              <div>
+                <div style={labelStyle}>Hours</div>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.25}
+                  style={inputStyle}
+                  value={soHours}
+                  onChange={(e) => setSoHours(e.target.value)}
+                  placeholder="Optional"
+                />
+              </div>
+
               {soScope === "member" ? (
                 <button
                   type="button"
@@ -1009,6 +1028,7 @@ export default function TrainingDetailPage() {
                         <strong style={{ marginLeft: 6 }}>{mName}</strong>
                         <span style={muted}> — {taskLabel}</span>
                         {s.evaluator_name ? <span style={muted}> · {s.evaluator_name}</span> : null}
+                        {s.hours != null ? <span style={muted}> · {s.hours}h</span> : null}
                         <span style={{ ...muted, marginLeft: 8 }}>{fmtDt(s.signed_at)}</span>
                         {s.notes ? <span style={muted}> · {s.notes}</span> : null}
                       </li>
