@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 type ActiveEvent = {
   type: "call" | "training" | "meeting" | "event";
@@ -88,12 +89,14 @@ function attendanceEndpoint(ev: ActiveEvent) {
 }
 
 export default function PortalPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<ActiveEvent[]>([]);
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [memberName, setMemberName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   // Per-card state: geo error messages, override note state
   const [cardMsg, setCardMsg] = useState<Record<string, string>>({});
@@ -102,6 +105,13 @@ export default function PortalPage() {
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function logout() {
+    setLoggingOut(true);
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    sessionStorage.removeItem("sar-display-name");
+    router.push("/login");
+  }
 
   async function loadAll() {
     try {
@@ -253,7 +263,16 @@ export default function PortalPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
-      <h1 style={{ marginTop: 0 }}>{memberName ? `${memberName}'s Portal` : "My Portal"}</h1>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <h1 style={{ margin: 0 }}>{memberName ? `${memberName}'s Portal` : "My Portal"}</h1>
+        <button
+          onClick={logout}
+          disabled={loggingOut}
+          style={{ fontSize: 13, padding: "6px 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569", cursor: "pointer" }}
+        >
+          {loggingOut ? "Signing out…" : "Sign out"}
+        </button>
+      </div>
 
       {/* Active Events */}
       <section>
