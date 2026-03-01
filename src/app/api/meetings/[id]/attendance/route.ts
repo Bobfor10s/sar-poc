@@ -60,6 +60,22 @@ export async function POST(req: Request, ctx: any) {
     return NextResponse.json({ error: "action must be 'arrive' or 'clear'" }, { status: 400 });
   }
 
+  // Block check-in if meeting hasn't started or has already ended
+  if (action === "arrive") {
+    const { data: mtg } = await supabaseDb
+      .from("meetings")
+      .select("start_dt, end_dt")
+      .eq("id", meeting_id)
+      .single();
+    const now = new Date();
+    if (mtg?.start_dt && new Date(mtg.start_dt) > now) {
+      return NextResponse.json({ error: "Meeting hasn't started yet" }, { status: 400 });
+    }
+    if (mtg?.end_dt && new Date(mtg.end_dt) <= now) {
+      return NextResponse.json({ error: "Meeting is already closed" }, { status: 400 });
+    }
+  }
+
   const checkin_override_note = body.checkin_override_note ? String(body.checkin_override_note) : undefined;
   const nowIso = new Date().toISOString();
 
