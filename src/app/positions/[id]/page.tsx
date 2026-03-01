@@ -27,6 +27,9 @@ type ReqRow = {
   id: string;
   req_kind: string;
   notes?: string | null;
+  min_count?: number | null;
+  activity_type?: string | null;
+  within_months?: number | null;
   courses?: { id: string; code: string; name: string } | null;
   required_position?: { id: string; code: string; name: string } | null;
   tasks?: { id: string; task_code: string; task_name: string } | null;
@@ -45,7 +48,15 @@ export default function PositionDetailPage() {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
 
-  const [reqForm, setReqForm] = useState({ req_kind: "task", task_id: "", course_id: "", notes: "" });
+  const [reqForm, setReqForm] = useState({
+    req_kind: "task",
+    task_id: "",
+    course_id: "",
+    notes: "",
+    min_count: "",
+    activity_type: "any",
+    within_months: "",
+  });
 
   async function load() {
     if (!positionId) return;
@@ -96,12 +107,17 @@ export default function PositionDetailPage() {
     setBusy("req");
     setMsg("");
     try {
-      const body: Record<string, string | undefined> = {
+      const body: Record<string, string | number | undefined> = {
         req_kind: reqForm.req_kind,
         notes: reqForm.notes || undefined,
       };
       if (reqForm.req_kind === "task") body.task_id = reqForm.task_id;
       if (reqForm.req_kind === "course") body.course_id = reqForm.course_id;
+      if (reqForm.req_kind === "time") {
+        body.min_count = Number(reqForm.min_count);
+        body.activity_type = reqForm.activity_type;
+        if (reqForm.within_months) body.within_months = Number(reqForm.within_months);
+      }
 
       const res = await fetch(`/api/positions/${positionId}/requirements`, {
         method: "POST",
@@ -110,7 +126,7 @@ export default function PositionDetailPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setMsg(json?.error ?? "Add requirement failed"); return; }
-      setReqForm({ req_kind: "task", task_id: "", course_id: "", notes: "" });
+      setReqForm({ req_kind: "task", task_id: "", course_id: "", notes: "", min_count: "", activity_type: "any", within_months: "" });
       await reloadReqs();
       setMsg("Requirement added.");
     } finally {
@@ -150,6 +166,12 @@ export default function PositionDetailPage() {
     if (r.req_kind === "position") {
       const p = r.required_position;
       return p ? `Prereq: ${p.code} — ${p.name}` : "Unknown position";
+    }
+    if (r.req_kind === "time") {
+      const n = r.min_count ?? 1;
+      const type = r.activity_type === "training" ? "training sessions" : r.activity_type === "call" ? "calls" : "activities";
+      const win = r.within_months ? ` within ${r.within_months} months` : "";
+      return `${n} ${type}${win}`;
     }
     return r.req_kind;
   }
@@ -232,12 +254,12 @@ export default function PositionDetailPage() {
               <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderBottom: "1px solid #f0f0f0" }}>
                 <span style={{
                   fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, marginRight: 4,
-                  background: r.req_kind === "task" ? "#eff6ff" : r.req_kind === "course" ? "#ecfdf5" : "#f5f3ff",
-                  border: r.req_kind === "task" ? "1px solid #93c5fd" : r.req_kind === "course" ? "1px solid #6ee7b7" : "1px solid #c4b5fd",
-                  color: r.req_kind === "task" ? "#1e40af" : r.req_kind === "course" ? "#065f46" : "#5b21b6",
+                  background: r.req_kind === "task" ? "#eff6ff" : r.req_kind === "course" ? "#ecfdf5" : r.req_kind === "time" ? "#fff7ed" : "#f5f3ff",
+                  border: r.req_kind === "task" ? "1px solid #93c5fd" : r.req_kind === "course" ? "1px solid #6ee7b7" : r.req_kind === "time" ? "1px solid #fdba74" : "1px solid #c4b5fd",
+                  color: r.req_kind === "task" ? "#1e40af" : r.req_kind === "course" ? "#065f46" : r.req_kind === "time" ? "#c2410c" : "#5b21b6",
                   textTransform: "uppercase" as const,
                 }}>
-                  {r.req_kind === "task" ? "Skill" : r.req_kind === "course" ? "Class" : r.req_kind}
+                  {r.req_kind === "task" ? "Skill" : r.req_kind === "course" ? "Class" : r.req_kind === "time" ? "Time" : r.req_kind}
                 </span>
                 {r.req_kind === "task" && r.tasks ? (
                   <Link href={`/tasks/${r.tasks.id}`} style={{ flex: 1, fontSize: 13, color: "#1e40af" }}>
@@ -264,11 +286,12 @@ export default function PositionDetailPage() {
         <form onSubmit={addRequirement} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <select
             value={reqForm.req_kind}
-            onChange={(e) => setReqForm({ req_kind: e.target.value, task_id: "", course_id: "", notes: "" })}
+            onChange={(e) => setReqForm({ req_kind: e.target.value, task_id: "", course_id: "", notes: "", min_count: "", activity_type: "any", within_months: "" })}
             style={selectStyle}
           >
             <option value="task">Skill / Task</option>
             <option value="course">Course / Class</option>
+            <option value="time">Time in activity</option>
           </select>
 
           {reqForm.req_kind === "task" && (
@@ -299,6 +322,38 @@ export default function PositionDetailPage() {
             </select>
           )}
 
+          {reqForm.req_kind === "time" && (
+            <>
+              <input
+                type="number"
+                placeholder="Count"
+                min={1}
+                step={1}
+                value={reqForm.min_count}
+                onChange={(e) => setReqForm({ ...reqForm, min_count: e.target.value })}
+                style={{ width: 70, ...selectStyle }}
+                required
+              />
+              <select
+                value={reqForm.activity_type}
+                onChange={(e) => setReqForm({ ...reqForm, activity_type: e.target.value })}
+                style={selectStyle}
+              >
+                <option value="any">Any activity</option>
+                <option value="training">Training sessions</option>
+                <option value="call">Calls</option>
+              </select>
+              <input
+                type="number"
+                placeholder="Within months"
+                min={1}
+                value={reqForm.within_months}
+                onChange={(e) => setReqForm({ ...reqForm, within_months: e.target.value })}
+                style={{ width: 130, ...selectStyle }}
+              />
+            </>
+          )}
+
           <input
             placeholder="Notes (opt)"
             value={reqForm.notes}
@@ -311,7 +366,8 @@ export default function PositionDetailPage() {
             disabled={
               busy === "req" ||
               (reqForm.req_kind === "task" && !reqForm.task_id) ||
-              (reqForm.req_kind === "course" && !reqForm.course_id)
+              (reqForm.req_kind === "course" && !reqForm.course_id) ||
+              (reqForm.req_kind === "time" && !reqForm.min_count)
             }
             style={{ fontSize: 13, padding: "6px 12px", borderRadius: 6, border: "1px solid #94a3b8", cursor: "pointer" }}
           >

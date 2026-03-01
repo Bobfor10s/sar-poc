@@ -64,3 +64,24 @@ export async function PATCH(req: Request, ctx: any) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });
 }
+
+export async function DELETE(_req: Request, ctx: any) {
+  const check = await requirePermission("manage_positions");
+  if (!check.ok) return check.response;
+
+  const id = await getIdFromCtx(ctx);
+  if (!id || !isUuid(id)) return NextResponse.json({ error: "bad task id" }, { status: 400 });
+
+  const { error } = await supabaseDb.from("position_tasks").delete().eq("id", id);
+
+  if (error) {
+    if (error.code === "23503") {
+      return NextResponse.json(
+        { error: "Cannot delete: skill is referenced by position requirements or member sign-offs. Deactivate it instead." },
+        { status: 409 }
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ data: null });
+}

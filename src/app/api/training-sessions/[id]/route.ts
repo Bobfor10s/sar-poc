@@ -65,6 +65,10 @@ export async function PATCH(req: Request, ctx: any) {
 
   if (body.is_test != null) patch.is_test = !!body.is_test;
 
+  if (body.incident_lat !== undefined) patch.incident_lat = body.incident_lat != null && body.incident_lat !== "" ? Number(body.incident_lat) : null;
+  if (body.incident_lng !== undefined) patch.incident_lng = body.incident_lng != null && body.incident_lng !== "" ? Number(body.incident_lng) : null;
+  if (body.incident_radius_m !== undefined) patch.incident_radius_m = body.incident_radius_m != null && body.incident_radius_m !== "" ? Number(body.incident_radius_m) : null;
+
   const { data, error } = await supabaseDb.from("training_sessions").update(patch).eq("id", id).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });

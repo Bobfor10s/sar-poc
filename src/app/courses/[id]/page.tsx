@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 type Course = {
   id: string;
@@ -29,11 +29,13 @@ type EditCourse = {
 
 export default function CourseDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const courseId = typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : "";
 
   const [course, setCourse] = useState<Course | null>(null);
   const [edit, setEdit] = useState<EditCourse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
@@ -106,6 +108,20 @@ export default function CourseDetailPage() {
     }
   }
 
+  async function deleteCourse() {
+    if (!confirm(`Delete course "${course?.code} — ${course?.name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/courses/${courseId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(json?.error ?? "Delete failed"); return; }
+      router.push("/courses");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   if (!course || !edit) return <div style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</div>;
 
   return (
@@ -121,7 +137,17 @@ export default function CourseDetailPage() {
       )}
 
       <section style={sectionStyle}>
-        <h2 style={h2}>Course Info</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ ...h2, marginBottom: 0 }}>Course Info</h2>
+          <button
+            type="button"
+            onClick={deleteCourse}
+            disabled={deleting || busy}
+            style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fef2f2", color: "#b91c1c", cursor: "pointer", fontWeight: 600 }}
+          >
+            {deleting ? "Deleting…" : "Delete Course"}
+          </button>
+        </div>
         <form onSubmit={save} style={{ display: "grid", gap: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
             <div>

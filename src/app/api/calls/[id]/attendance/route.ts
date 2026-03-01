@@ -139,3 +139,43 @@ export async function POST(req: Request, ctx: any) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }
+
+/**
+ * PATCH — edit time_in / time_out on an existing attendance record.
+ * Body: { attendance_id, time_in?, time_out? }
+ */
+export async function PATCH(req: Request, ctx: any) {
+  const check = await requirePermission("manage_calls");
+  if (!check.ok) return check.response;
+
+  const call_id = await getIdFromCtx(ctx);
+  if (!call_id || !isUuid(call_id)) {
+    return NextResponse.json({ error: `bad call id: ${call_id || "(missing)"}` }, { status: 400 });
+  }
+
+  const body = await req.json().catch(() => ({}));
+  const attendance_id = String(body.attendance_id ?? "").trim();
+  if (!attendance_id || !isUuid(attendance_id)) {
+    return NextResponse.json({ error: "bad attendance_id" }, { status: 400 });
+  }
+
+  const payload: Record<string, string | null> = {};
+  if (body.time_in !== undefined) payload.time_in = body.time_in ? String(body.time_in) : null;
+  if (body.time_out !== undefined) payload.time_out = body.time_out ? String(body.time_out) : null;
+
+  if (Object.keys(payload).length === 0) {
+    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+  }
+
+  const { error } = await supabaseDb
+    .from("call_attendance")
+    .update(payload)
+    .eq("id", attendance_id)
+    .eq("call_id", call_id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const { data, error: listErr } = await fetchAttendanceList(call_id);
+  if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
+}

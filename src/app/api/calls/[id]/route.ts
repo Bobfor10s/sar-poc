@@ -161,5 +161,17 @@ export async function PATCH(req: Request, ctx: any) {
     .single();
 
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+  // When closing a call, auto-clear any members still checked in
+  if (update.status === "closed") {
+    const now = update.end_dt ?? new Date().toISOString();
+    await supabaseDb
+      .from("call_attendance")
+      .update({ time_out: now })
+      .eq("call_id", id)
+      .not("time_in", "is", null)
+      .is("time_out", null);
+  }
+
   return NextResponse.json({ data: updated });
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 type TaskDetail = {
   id: string;
@@ -14,7 +14,7 @@ type TaskDetail = {
 
 type TaskReq = {
   id: string;
-  req_kind: "course" | "time";
+  req_kind: "course" | "time" | "test" | "physical";
   course_id?: string | null;
   courses?: { id: string; code: string; name: string } | null;
   min_hours?: number | null;
@@ -36,6 +36,7 @@ type Signoff = {
 
 export default function TaskDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const taskId = typeof params?.id === "string" ? params.id : Array.isArray(params?.id) ? params.id[0] : "";
 
   const [task, setTask] = useState<TaskDetail | null>(null);
@@ -45,6 +46,7 @@ export default function TaskDetailPage() {
   const [signoffs, setSignoffs] = useState<Signoff[]>([]);
 
   const [busy, setBusy] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [msg, setMsg] = useState("");
 
   const [reqForm, setReqForm] = useState({
@@ -154,10 +156,12 @@ export default function TaskDetailPage() {
       const win = r.within_months ? ` within ${r.within_months} months` : "";
       return `${hrs} hr${hrs !== 1 ? "s" : ""} in ${type}${win}`;
     }
+    if (r.req_kind === "test") return r.notes ? `Written test: ${r.notes}` : "Written test";
+    if (r.req_kind === "physical") return r.notes ? `Physical: ${r.notes}` : "Physical demonstration";
     return r.req_kind;
   }
 
-  // Summary line: "Requires CPR + 4 hrs training + approval"
+  // Summary line
   const reqSummary = (() => {
     const parts: string[] = [];
     for (const r of reqs) {
@@ -166,10 +170,26 @@ export default function TaskDetailPage() {
         const type = r.activity_type === "training" ? "training" : r.activity_type === "call" ? "call" : "activity";
         parts.push(`${r.min_hours}h ${type}`);
       }
+      if (r.req_kind === "test") parts.push("written test");
+      if (r.req_kind === "physical") parts.push("physical proof");
     }
     parts.push("approval");
     return parts.join(" + ");
   })();
+
+  async function deleteTask() {
+    if (!confirm(`Delete skill "${task?.task_code} — ${task?.task_name}"? This cannot be undone.`)) return;
+    setDeleting(true);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(json?.error ?? "Delete failed"); return; }
+      router.push("/tasks");
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   if (!task) return <div style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</div>;
 
@@ -185,7 +205,17 @@ export default function TaskDetailPage() {
 
       {/* Skill info */}
       <section style={sectionStyle}>
-        <h2 style={h2}>Skill Info</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ ...h2, marginBottom: 0 }}>Skill Info</h2>
+          <button
+            type="button"
+            onClick={deleteTask}
+            disabled={deleting || busy !== ""}
+            style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid #fca5a5", background: "#fef2f2", color: "#b91c1c", cursor: "pointer", fontWeight: 600 }}
+          >
+            {deleting ? "Deleting…" : "Delete Skill"}
+          </button>
+        </div>
         <form onSubmit={saveTask} style={{ display: "grid", gap: 10 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
             <div>
@@ -213,13 +243,16 @@ export default function TaskDetailPage() {
         </form>
       </section>
 
-      {/* How to earn */}
+      {/* Requirements for admin approval */}
       <section style={sectionStyle}>
-        <h2 style={h2}>How to Earn This Skill</h2>
+        <h2 style={h2}>Requirements for Approval</h2>
+        <p style={{ ...muted, marginTop: 0, marginBottom: 12 }}>
+          Admins use these criteria when reviewing whether to approve this skill for a member.
+        </p>
 
         {/* Summary pill */}
         <div style={{ marginBottom: 14, padding: "8px 12px", background: "#f0f4ff", border: "1px solid #c7d2fe", borderRadius: 8, fontSize: 13, color: "#3730a3" }}>
-          <strong>Earn by:</strong> {reqSummary}
+          <strong>Criteria:</strong> {reqSummary}
         </div>
 
         {reqs.length === 0 ? (
@@ -230,15 +263,15 @@ export default function TaskDetailPage() {
               <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderBottom: "1px solid #f0f0f0" }}>
                 <span style={{
                   fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 999, marginRight: 4,
-                  background: r.req_kind === "course" ? "#ecfdf5" : "#eff6ff",
-                  border: r.req_kind === "course" ? "1px solid #6ee7b7" : "1px solid #93c5fd",
-                  color: r.req_kind === "course" ? "#065f46" : "#1e40af",
-                  textTransform: "uppercase",
+                  background: r.req_kind === "course" ? "#ecfdf5" : r.req_kind === "time" ? "#eff6ff" : r.req_kind === "test" ? "#fefce8" : "#faf5ff",
+                  border: r.req_kind === "course" ? "1px solid #6ee7b7" : r.req_kind === "time" ? "1px solid #93c5fd" : r.req_kind === "test" ? "1px solid #fde047" : "1px solid #d8b4fe",
+                  color: r.req_kind === "course" ? "#065f46" : r.req_kind === "time" ? "#1e40af" : r.req_kind === "test" ? "#713f12" : "#6b21a8",
+                  textTransform: "uppercase" as const,
                 }}>
-                  {r.req_kind === "course" ? "Class" : "Time"}
+                  {r.req_kind === "course" ? "Class" : r.req_kind === "time" ? "Time" : r.req_kind === "test" ? "Written Test" : "Physical"}
                 </span>
                 <span style={{ flex: 1, fontSize: 13 }}>{reqLabel(r)}</span>
-                {r.notes && <span style={muted}>· {r.notes}</span>}
+                {r.notes && r.req_kind !== "test" && r.req_kind !== "physical" && <span style={muted}>· {r.notes}</span>}
                 <button
                   type="button"
                   onClick={() => removeReq(r.id)}
@@ -256,11 +289,13 @@ export default function TaskDetailPage() {
         <form onSubmit={addReq} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <select
             value={reqForm.req_kind}
-            onChange={(e) => setReqForm({ ...reqForm, req_kind: e.target.value, course_id: "", min_hours: "", within_months: "" })}
+            onChange={(e) => setReqForm({ ...reqForm, req_kind: e.target.value, course_id: "", min_hours: "", within_months: "", notes: "" })}
             style={selectStyle}
           >
             <option value="course">Class / Course</option>
             <option value="time">Time in activity</option>
+            <option value="test">Written test</option>
+            <option value="physical">Physical proof</option>
           </select>
 
           {reqForm.req_kind === "course" && (
@@ -310,15 +345,26 @@ export default function TaskDetailPage() {
           )}
 
           <input
-            placeholder="Notes (opt)"
+            placeholder={
+              reqForm.req_kind === "test" ? "Test description (required)" :
+              reqForm.req_kind === "physical" ? "What to demonstrate (required)" :
+              "Notes (opt)"
+            }
             value={reqForm.notes}
             onChange={(e) => setReqForm({ ...reqForm, notes: e.target.value })}
-            style={{ width: 120, ...selectStyle }}
+            style={{ flex: reqForm.req_kind === "test" || reqForm.req_kind === "physical" ? 1 : undefined, width: reqForm.req_kind === "test" || reqForm.req_kind === "physical" ? undefined : 120, minWidth: 140, ...selectStyle }}
+            required={reqForm.req_kind === "test" || reqForm.req_kind === "physical"}
           />
 
           <button
             type="submit"
-            disabled={busy === "req" || (reqForm.req_kind === "course" && !reqForm.course_id) || (reqForm.req_kind === "time" && !reqForm.min_hours)}
+            disabled={
+              busy === "req" ||
+              (reqForm.req_kind === "course" && !reqForm.course_id) ||
+              (reqForm.req_kind === "time" && !reqForm.min_hours) ||
+              (reqForm.req_kind === "test" && !reqForm.notes) ||
+              (reqForm.req_kind === "physical" && !reqForm.notes)
+            }
             style={{ fontSize: 13, padding: "6px 12px", borderRadius: 6, border: "1px solid #94a3b8", cursor: "pointer" }}
           >
             Add
@@ -326,14 +372,17 @@ export default function TaskDetailPage() {
         </form>
       </section>
 
-      {/* Members with sign-offs */}
+      {/* Practice records */}
       <section style={sectionStyle}>
         <h2 style={h2}>
-          Approved Members{" "}
+          Practice Records{" "}
           <span style={muted}>({signoffs.length})</span>
         </h2>
+        <p style={{ ...muted, marginTop: 0, marginBottom: 10 }}>
+          Each entry represents a logged use of this skill during a training or call. Admins use this history when reviewing position and task approvals.
+        </p>
         {signoffs.length === 0 ? (
-          <p style={muted}>No approvals recorded yet.</p>
+          <p style={muted}>No uses logged yet.</p>
         ) : (
           <ul style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
             {signoffs.map((s) => {
@@ -341,7 +390,7 @@ export default function TaskDetailPage() {
               const name = m ? `${m.first_name} ${m.last_name}` : s.member_id;
               return (
                 <li key={s.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0f0f0", fontSize: 13, display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ color: "#1a7f3c" }}>✓</span>
+                  <span style={{ color: "#6366f1" }}>◎</span>
                   <strong>{name}</strong>
                   <span style={muted}>{new Date(s.signed_at).toLocaleDateString()}</span>
                   {s.evaluator_name && <span style={muted}>· {s.evaluator_name}</span>}

@@ -76,6 +76,10 @@ export async function PATCH(req: Request, ctx: any) {
 
   if (body.is_test !== undefined) payload.is_test = !!body.is_test;
 
+  if (body.incident_lat !== undefined) payload.incident_lat = body.incident_lat != null && body.incident_lat !== "" ? Number(body.incident_lat) : null;
+  if (body.incident_lng !== undefined) payload.incident_lng = body.incident_lng != null && body.incident_lng !== "" ? Number(body.incident_lng) : null;
+  if (body.incident_radius_m !== undefined) payload.incident_radius_m = body.incident_radius_m != null && body.incident_radius_m !== "" ? Number(body.incident_radius_m) : null;
+
   const { data, error } = await supabaseDb
     .from("meetings")
     .update(payload)

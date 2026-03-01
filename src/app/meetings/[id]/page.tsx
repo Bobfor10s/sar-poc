@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import styles from "../../../components/ui/ui.module.css";
 
 type Meeting = {
   id: string;
@@ -12,9 +11,7 @@ type Meeting = {
   location_text?: string | null;
   agenda?: string | null;
   notes?: string | null;
-  status?: string | null;     // scheduled|completed|cancelled|archived
-  visibility?: string | null; // members|public
-  is_test?: boolean | null;
+  status?: string | null;
   created_at?: string | null;
 };
 
@@ -37,6 +34,15 @@ function localInputToIso(v: string) {
   return d.toISOString();
 }
 
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={labelStyle}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
 export default function MeetingDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -51,9 +57,7 @@ export default function MeetingDetailPage() {
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string>("");
-
-  // local datetime inputs (so the browser control works nicely)
+  const [msg, setMsg] = useState("");
   const [startLocal, setStartLocal] = useState("");
   const [endLocal, setEndLocal] = useState("");
 
@@ -63,19 +67,11 @@ export default function MeetingDetailPage() {
       setLoading(false);
       return;
     }
-
     setLoading(true);
     setMsg("");
-
     const res = await fetch(`/api/meetings/${meetingId}`);
     const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      setMsg(json?.error ?? "Failed to load meeting");
-      setLoading(false);
-      return;
-    }
-
+    if (!res.ok) { setMsg(json?.error ?? "Failed to load meeting"); setLoading(false); return; }
     const m = json?.data ?? null;
     setMeeting(m);
     setStartLocal(toLocalInputValue(m?.start_dt));
@@ -83,236 +79,144 @@ export default function MeetingDetailPage() {
     setLoading(false);
   }
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetingId]);
+  useEffect(() => { load(); }, [meetingId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
     if (!meeting) return;
-
     setBusy(true);
     setMsg("");
-
-    const payload: any = {
-      title: meeting.title,
-      location_text: meeting.location_text ?? null,
-      agenda: meeting.agenda ?? null,
-      notes: meeting.notes ?? null,
-      status: meeting.status ?? "scheduled",
-      visibility: meeting.visibility ?? "members",
-      is_test: !!meeting.is_test,
-      start_dt: localInputToIso(startLocal),
-      end_dt: endLocal ? localInputToIso(endLocal) : null,
-    };
-
     const res = await fetch(`/api/meetings/${meeting.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        title: meeting.title,
+        location_text: meeting.location_text ?? null,
+        agenda: meeting.agenda ?? null,
+        notes: meeting.notes ?? null,
+        status: meeting.status ?? "scheduled",
+        start_dt: localInputToIso(startLocal),
+        end_dt: endLocal ? localInputToIso(endLocal) : null,
+      }),
     });
-
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setMsg(json?.error ?? "Save failed");
-      setBusy(false);
-      return;
-    }
-
+    if (!res.ok) { setMsg(json?.error ?? "Save failed"); setBusy(false); return; }
     setMeeting(json.data ?? null);
     setMsg("Saved.");
     setBusy(false);
   }
 
-  async function hardDeleteTest() {
-    if (!meeting) return;
-
-    if (!meeting.is_test) {
-      alert("Hard delete is allowed only for TEST meetings.");
-      return;
-    }
-
-    const ok = confirm("Hard delete this TEST meeting? This cannot be undone.");
-    if (!ok) return;
-
-    setBusy(true);
-    setMsg("");
-
-    const res = await fetch(`/api/meetings/${meeting.id}`, { method: "DELETE" });
-    const json = await res.json().catch(() => ({}));
-
-    if (!res.ok) {
-      setMsg(json?.error ?? "Delete failed");
-      setBusy(false);
-      return;
-    }
-
-    router.push("/meetings");
-  }
-
   if (loading) {
-    return (
-      <main className={styles.container}>
-        <div className={styles.card}>
-          <p className={styles.muted}>Loading…</p>
-        </div>
-      </main>
-    );
+    return <main style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</main>;
   }
 
   return (
-    <main className={styles.container}>
-      <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <h1 className={styles.h1} style={{ marginBottom: 0 }}>
-              Meeting Detail
-            </h1>
-            <a href="/meetings" className={styles.link}>
-              ← Back to Meetings
-            </a>
-          </div>
+    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 900 }}>
+      <p style={{ margin: "0 0 4px" }}><a href="/meetings" style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}>← Back to Meetings</a></p>
 
-          <button type="button" className={styles.buttonSecondary} onClick={load}>
-            Refresh
-          </button>
-        </div>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
+        <h1 style={{ margin: 0 }}>{meeting?.title ?? "Meeting"}</h1>
+        <button type="button" onClick={load} disabled={busy} style={{ marginLeft: "auto" }}>
+          Refresh
+        </button>
+      </div>
 
-        {msg ? (
-          <div style={{ marginTop: 10, padding: 10, border: "1px solid #e5e7eb", borderRadius: 10, background: "#f8fafc" }}>
-            {msg}
-          </div>
-        ) : null}
+      {msg && (
+        <div style={{ marginTop: 10, padding: 10, border: "1px solid #eee", borderRadius: 8, background: "#fafafa" }}>{msg}</div>
+      )}
 
-        {!meeting ? (
-          <p className={styles.muted} style={{ marginTop: 12 }}>
-            Meeting not found.
-          </p>
-        ) : (
-          <>
-            <div className={styles.formGrid} style={{ marginTop: 12 }}>
-              <div className={styles.label}>Title</div>
-              <input
-                className={styles.input}
-                value={meeting.title ?? ""}
-                onChange={(e) => setMeeting({ ...meeting, title: e.target.value })}
-                placeholder="Meeting title"
-              />
+      {!meeting ? (
+        <p style={{ opacity: 0.7, marginTop: 12 }}>Meeting not found.</p>
+      ) : (
+        <>
+          <section style={sectionStyle}>
+            <h2 style={h2}>Meeting Info</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <Field label="Title">
+                <input style={inputStyle} value={meeting.title ?? ""} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} placeholder="Meeting title" />
+              </Field>
 
-              <div className={styles.label}>Start</div>
-              <input
-                className={styles.input}
-                type="datetime-local"
-                value={startLocal}
-                onChange={(e) => setStartLocal(e.target.value)}
-              />
+              <Field label="Status">
+                <select style={inputStyle} value={(meeting.status ?? "scheduled").toLowerCase()} onChange={(e) => setMeeting({ ...meeting, status: e.target.value })}>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </Field>
 
-              <div className={styles.label}>End</div>
-              <input
-                className={styles.input}
-                type="datetime-local"
-                value={endLocal}
-                onChange={(e) => setEndLocal(e.target.value)}
-              />
+              <Field label="Start">
+                <input style={inputStyle} type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
+              </Field>
 
-              <div className={styles.label}>Location</div>
-              <input
-                className={styles.input}
-                value={meeting.location_text ?? ""}
-                onChange={(e) => setMeeting({ ...meeting, location_text: e.target.value })}
-                placeholder="Station / Firehouse / Zoom / etc."
-              />
+              <Field label="End">
+                <input style={inputStyle} type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
+              </Field>
 
-              <div className={styles.label}>Agenda</div>
-              <input
-                className={styles.input}
-                value={meeting.agenda ?? ""}
-                onChange={(e) => setMeeting({ ...meeting, agenda: e.target.value })}
-                placeholder="Short agenda"
-              />
+              <Field label="Location">
+                <input style={inputStyle} value={meeting.location_text ?? ""} onChange={(e) => setMeeting({ ...meeting, location_text: e.target.value })} placeholder="Station / Firehouse / Zoom / etc." />
+              </Field>
 
-              <div className={styles.label}>Notes</div>
-              <input
-                className={styles.input}
-                value={meeting.notes ?? ""}
-                onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })}
-                placeholder="Short notes"
-              />
+              <Field label="Agenda">
+                <input style={inputStyle} value={meeting.agenda ?? ""} onChange={(e) => setMeeting({ ...meeting, agenda: e.target.value })} placeholder="Short agenda" />
+              </Field>
 
-              <div className={styles.label}>Status</div>
-              <select
-                className={styles.select}
-                value={(meeting.status ?? "scheduled").toLowerCase()}
-                onChange={(e) => setMeeting({ ...meeting, status: e.target.value })}
-              >
-                <option value="scheduled">scheduled</option>
-                <option value="completed">completed</option>
-                <option value="cancelled">cancelled</option>
-                <option value="archived">archived</option>
-              </select>
-
-              <div className={styles.label}>Visibility</div>
-              <select
-                className={styles.select}
-                value={(meeting.visibility ?? "members").toLowerCase()}
-                onChange={(e) => setMeeting({ ...meeting, visibility: e.target.value })}
-              >
-                <option value="members">members</option>
-                <option value="public">public</option>
-              </select>
-
-              <div className={styles.label}>TEST</div>
-              <label className={styles.row} style={{ gap: 10 }}>
-                <input
-                  type="checkbox"
-                  checked={!!meeting.is_test}
-                  onChange={(e) => setMeeting({ ...meeting, is_test: e.target.checked })}
-                />
-                <span className={styles.muted}>Mark as TEST (allows hard delete)</span>
-              </label>
-            </div>
-
-            <div className={styles.row} style={{ marginTop: 14, gap: 10 }}>
-              <button
-                type="button"
-                className={styles.button}
-                onClick={save}
-                disabled={busy || !String(meeting.title ?? "").trim()}
-              >
-                {busy ? "Saving…" : "Save"}
-              </button>
-
-              <button
-                type="button"
-                className={styles.buttonSecondary}
-                onClick={() => router.push("/meetings")}
-                disabled={busy}
-              >
-                Done
-              </button>
-
-              <div style={{ marginLeft: "auto" }}>
-                <button
-                  type="button"
-                  className={styles.buttonDanger ?? styles.buttonSecondary}
-                  onClick={hardDeleteTest}
-                  disabled={busy || !meeting.is_test}
-                  title={meeting.is_test ? "Hard delete TEST meeting" : "Enable TEST to allow hard delete"}
-                >
-                  Hard delete (TEST)
-                </button>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <Field label="Notes">
+                  <input style={inputStyle} value={meeting.notes ?? ""} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} placeholder="Short notes" />
+                </Field>
               </div>
             </div>
 
-            <hr className={styles.hr} />
-
-            <div className={styles.muted} style={{ fontSize: 12 }}>
-              <div><strong>ID:</strong> {meeting.id}</div>
-              {meeting.created_at ? <div><strong>Created:</strong> {new Date(meeting.created_at).toLocaleString()}</div> : null}
+            <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+              <button
+                type="button"
+                onClick={save}
+                disabled={busy || !String(meeting.title ?? "").trim()}
+                style={{ padding: "8px 20px", background: busy ? "#94a3b8" : "#1e40af", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer" }}
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
+              <button type="button" onClick={() => router.push("/meetings")} disabled={busy} style={{ padding: "8px 20px", background: "#f1f5f9", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
+                Done
+              </button>
             </div>
-          </>
-        )}
-      </div>
+          </section>
+
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 12 }}>
+            <div><strong>ID:</strong> {meeting.id}</div>
+            {meeting.created_at ? <div><strong>Created:</strong> {new Date(meeting.created_at).toLocaleString()}</div> : null}
+          </div>
+        </>
+      )}
     </main>
   );
 }
+
+const sectionStyle: React.CSSProperties = {
+  marginTop: 16,
+  padding: 16,
+  border: "1px solid #e5e5e5",
+  borderRadius: 10,
+};
+
+const h2: React.CSSProperties = {
+  marginTop: 0,
+  marginBottom: 12,
+  fontSize: 16,
+  fontWeight: 700,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontSize: 12,
+  fontWeight: 600,
+  marginBottom: 4,
+  opacity: 0.8,
+};
+
+const inputStyle: React.CSSProperties = {
+  padding: "7px 10px",
+  borderRadius: 8,
+  border: "1px solid #ddd",
+  fontSize: 13,
+  width: "100%",
+};

@@ -36,6 +36,7 @@ type SortKey =
   | "name"
   | "sar"
   | "status"
+  | "onsite"
   | "email"
   | "phone";
 
@@ -48,10 +49,27 @@ export default function MembersPage() {
   const [rows, setRows] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string>("");
+  const [memberLocations, setMemberLocations] = useState<Record<string, { type: string; title: string }>>({});
 
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  async function loadOnSite() {
+    try {
+      const res = await fetch("/api/active-attendance");
+      if (!res.ok) return;
+      const locations: Record<string, { type: string; title: string }> = await res.json().catch(() => ({}));
+      setMemberLocations(locations);
+      // Auto-sort by location on initial load if anyone is active
+      if (Object.keys(locations).length > 0) {
+        setSortKey("onsite");
+        setSortDir("asc");
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -97,7 +115,8 @@ export default function MembersPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    loadOnSite();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleSort(next: SortKey) {
     if (sortKey === next) {
@@ -137,6 +156,7 @@ export default function MembersPage() {
       if (sortKey === "name") return norm(`${m.last_name ?? ""}, ${m.first_name ?? ""}`);
       if (sortKey === "sar") return norm(m.sar_primary_code ?? m.sar_codes ?? "");
       if (sortKey === "status") return norm(m.status ?? "");
+      if (sortKey === "onsite") return memberLocations[m.id] ? "0" : "1";
       if (sortKey === "email") return norm(m.email ?? "");
       if (sortKey === "phone") return norm(m.phone ?? "");
       return "";
@@ -149,7 +169,7 @@ export default function MembersPage() {
       if (av > bv) return 1 * dir;
       return 0;
     });
-  }, [filtered, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir, memberLocations]);
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 1200 }}>
@@ -159,7 +179,7 @@ export default function MembersPage() {
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button
             type="button"
-            onClick={load}
+            onClick={() => { load(); loadOnSite(); }}
             style={{
               padding: "8px 12px",
               borderRadius: 10,
@@ -230,6 +250,9 @@ export default function MembersPage() {
               <Th onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir}>
                 Name
               </Th>
+              <Th onClick={() => toggleSort("onsite")} active={sortKey === "onsite"} dir={sortDir}>
+                Location
+              </Th>
               <Th onClick={() => toggleSort("sar")} active={sortKey === "sar"} dir={sortDir}>
                 Capabilities
               </Th>
@@ -248,13 +271,13 @@ export default function MembersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={5} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={6} style={{ padding: 14, opacity: 0.75 }}>
                   Loading…
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={6} style={{ padding: 14, opacity: 0.75 }}>
                   No members found.
                 </td>
               </tr>
@@ -272,6 +295,14 @@ export default function MembersPage() {
                       <Link href={`/members/${m.id}`} style={{ textDecoration: "none" }}>
                         <strong>{name || m.id}</strong>
                       </Link>
+                    </td>
+
+                    <td style={td}>
+                      {memberLocations[m.id] && (
+                        <span style={locationBadgeStyle(memberLocations[m.id].type)}>
+                          {memberLocations[m.id].type.charAt(0).toUpperCase() + memberLocations[m.id].type.slice(1)}
+                        </span>
+                      )}
                     </td>
 
                     <td style={td}>
@@ -387,6 +418,15 @@ function Th({
       {active ? <span style={{ marginLeft: 6, opacity: 0.7 }}>{dir === "asc" ? "▲" : "▼"}</span> : null}
     </th>
   );
+}
+
+function locationBadgeStyle(type: string): React.CSSProperties {
+  const base: React.CSSProperties = { fontSize: 11, padding: "1px 7px", borderRadius: 999, fontWeight: 700, whiteSpace: "nowrap" };
+  if (type === "call")     return { ...base, background: "#fef9c3", border: "1px solid #ca8a04", color: "#713f12" };
+  if (type === "training") return { ...base, background: "#eff6ff", border: "1px solid #3b82f6", color: "#1e3a8a" };
+  if (type === "meeting")  return { ...base, background: "#f0fdf4", border: "1px solid #22c55e", color: "#14532d" };
+  if (type === "event")    return { ...base, background: "#faf5ff", border: "1px solid #a855f7", color: "#581c87" };
+  return { ...base, background: "#f1f5f9", border: "1px solid #94a3b8" };
 }
 
 const th: React.CSSProperties = {

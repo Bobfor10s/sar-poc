@@ -21,6 +21,9 @@ async function checkPositionRequirements(member_id: string, position_id: string)
       course_id,
       required_position_id,
       task_id,
+      min_count,
+      activity_type,
+      within_months,
       courses:course_id ( id, code, name ),
       positions:required_position_id ( id, code, name ),
       tasks:task_id ( id, task_code, task_name )
@@ -98,6 +101,48 @@ async function checkPositionRequirements(member_id: string, position_id: string)
         }
       }
     }
+
+    if (kind === "time") {
+      const minCount = Number((r as any).min_count ?? 1);
+      const actType = String((r as any).activity_type ?? "any");
+      const withinMonths = (r as any).within_months ? Number((r as any).within_months) : null;
+      let cutoff: string | null = null;
+      if (withinMonths) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - withinMonths);
+        cutoff = d.toISOString().slice(0, 10);
+      }
+
+      let actCount = 0;
+
+      if (actType !== "call") {
+        const { data: taData } = await supabaseDb
+          .from("training_attendance")
+          .select("id, training_sessions:training_session_id(start_dt)")
+          .eq("member_id", member_id)
+          .eq("status", "attended");
+        let taRows = (taData ?? []) as unknown as Array<{ id: string; training_sessions: { start_dt: string } | null }>;
+        if (cutoff) taRows = taRows.filter((row) => (row.training_sessions?.start_dt ?? "").slice(0, 10) >= cutoff!);
+        actCount += taRows.length;
+      }
+
+      if (actType !== "training") {
+        const { data: caData } = await supabaseDb
+          .from("call_attendance")
+          .select("id, time_in")
+          .eq("member_id", member_id)
+          .not("time_in", "is", null);
+        let caRows = (caData ?? []) as Array<{ id: string; time_in: string | null }>;
+        if (cutoff) caRows = caRows.filter((row) => (row.time_in ?? "").slice(0, 10) >= cutoff!);
+        actCount += caRows.length;
+      }
+
+      if (actCount < minCount) {
+        const typeLabel = actType === "training" ? "training sessions" : actType === "call" ? "calls" : "activities";
+        const winLabel = withinMonths ? ` within ${withinMonths} months` : "";
+        missing_courses.push(`${actCount}/${minCount} ${typeLabel}${winLabel}`);
+      }
+    }
   }
 
   return {
@@ -154,16 +199,22 @@ export async function GET(req: Request) {
     return NextResponse.json({ data: data ?? [] });
   }
 
-  // Mode 3: by member_id + position_id (original behaviour)
+  // Mode 3: by member_id (+ optional position_id filter)
   if (!member_id || !isUuid(member_id)) return NextResponse.json({ error: "bad member_id" }, { status: 400 });
-  if (!position_id || !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
+  if (position_id && !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
 
-  const { data, error } = await supabaseDb
+  let query = supabaseDb
     .from("member_task_signoffs")
     .select("id, member_id, position_id, task_id, evaluator_name, evaluator_position, signed_at, notes, call_id, training_session_id")
     .eq("member_id", member_id)
-    .eq("position_id", position_id)
     .order("signed_at", { ascending: false });
+
+  // Include both position-specific signoffs AND global (call/training-level) signoffs where position_id is null
+  if (position_id) {
+    query = query.or(`position_id.eq.${position_id},position_id.is.null`);
+  }
+
+  const { data, error } = await query;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data: data ?? [] });
@@ -179,7 +230,7 @@ export async function POST(req: Request) {
   const task_id = String(body.task_id ?? "").trim();
 
   if (!member_id || !isUuid(member_id)) return NextResponse.json({ error: "bad member_id" }, { status: 400 });
-  if (!position_id || !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
+  if (position_id && !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
   if (!task_id || !isUuid(task_id)) return NextResponse.json({ error: "bad task_id" }, { status: 400 });
 
   // If this is PTB Complete, enforce requirements first
@@ -192,7 +243,7 @@ export async function POST(req: Request) {
   if (taskErr) return NextResponse.json({ error: taskErr.message }, { status: 500 });
 
   const task_code = String((taskRow as any)?.task_code ?? "");
-  if (isPtbCompleteTaskCode(task_code)) {
+  if (isPtbCompleteTaskCode(task_code) && position_id) {
     try {
       const reqCheck = await checkPositionRequirements(member_id, position_id);
 
@@ -219,7 +270,7 @@ export async function POST(req: Request) {
 
   const payload = {
     member_id,
-    position_id,
+    position_id: position_id || null,
     task_id,
     evaluator_name: body.evaluator_name ? String(body.evaluator_name) : null,
     evaluator_position: body.evaluator_position ? String(body.evaluator_position) : null,

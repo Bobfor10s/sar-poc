@@ -86,36 +86,46 @@ export async function PATCH(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const id = String(body.id ?? "").trim();
+  const member_id = String(body.member_id ?? "").trim();
+  const position_id = String(body.position_id ?? "").trim();
 
-  if (!id || !isUuid(id)) return NextResponse.json({ error: "bad id" }, { status: 400 });
+  const now = new Date().toISOString();
 
-  const payload: any = {};
+  // If no existing row id — upsert (auto-detected member reaching qualification)
+  if (!id) {
+    if (!member_id || !isUuid(member_id)) return NextResponse.json({ error: "bad member_id" }, { status: 400 });
+    if (!position_id || !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
+
+    const { data, error } = await supabaseDb
+      .from("member_positions")
+      .upsert(
+        { member_id, position_id, status: "qualified", approved_at: now, awarded_at: now },
+        { onConflict: "member_id,position_id" }
+      )
+      .select(`id, member_id, position_id, status, awarded_at, approved_at, notes, created_at, positions:position_id(id, code, name)`)
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data });
+  }
+
+  if (!isUuid(id)) return NextResponse.json({ error: "bad id" }, { status: 400 });
+
+  const payload: Record<string, string | null> = {};
   if (body.status !== undefined) payload.status = String(body.status);
   if (body.notes !== undefined) payload.notes = body.notes ? String(body.notes) : null;
 
-  // Approve toggle (simple)
   if (body.approve === true) {
-    payload.approved_at = new Date().toISOString();
-    // approved_by can be added later when you have auth/users wired
+    payload.approved_at = now;
+    payload.awarded_at = now;
+    payload.status = "qualified";
   }
 
   const { data, error } = await supabaseDb
     .from("member_positions")
     .update(payload)
     .eq("id", id)
-    .select(`
-      id,
-      member_id,
-      position_id,
-      status,
-      awarded_at,
-      expires_at,
-      approved_by,
-      approved_at,
-      notes,
-      created_at,
-      positions:position_id ( id, code, name )
-    `)
+    .select(`id, member_id, position_id, status, awarded_at, expires_at, approved_by, approved_at, notes, created_at, positions:position_id(id, code, name)`)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

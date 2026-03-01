@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseDb } from "@/lib/supabase/db";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -18,5 +19,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 401 });
   }
 
-  return NextResponse.json({ ok: true, user: data.user });
+  // Fetch member row to get role for routing cookie
+  const { data: member } = await supabaseDb
+    .from("members")
+    .select("role")
+    .eq("user_id", data.user.id)
+    .maybeSingle();
+
+  const role = member?.role ?? "member";
+
+  const response = NextResponse.json({ ok: true, role, user: data.user });
+  response.cookies.set("sar-role", role, { httpOnly: true, sameSite: "lax", path: "/" });
+  return response;
 }

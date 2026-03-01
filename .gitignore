@@ -52,3 +52,4 @@ node_modules/
 sar-poc@*
 /next
 /npm
+.vercel

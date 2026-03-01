@@ -7,25 +7,17 @@ type Member = {
   id: string;
   first_name: string;
   last_name: string;
+  field_roles?: string[] | null;
+  roster_certs?: string[] | null;
 };
 
 type Call = {
   id: string;
+  title?: string | null;
+  status?: string | null;
   start_dt?: string | null;
   end_dt?: string | null;
-
-  type?: string | null;
-  type_other?: string | null;
-
-  title?: string | null;
-  location_text?: string | null;
   summary?: string | null;
-  outcome?: string | null;
-
-  visibility?: string | null; // members|public
-  is_test?: boolean | null;
-  status?: string | null; // open|closed|cancelled|archived
-
   incident_lat?: number | null;
   incident_lng?: number | null;
   incident_radius_m?: number | null;
@@ -35,143 +27,164 @@ type Attendance = {
   id: string;
   call_id: string;
   member_id: string;
-  role_on_call?: string | null;
   time_in?: string | null;
   time_out?: string | null;
   notes?: string | null;
 };
 
-type CallNote = {
-  id: string;
-  call_id: string;
-  note_text: string;
-  created_at: string;
-};
-
-type MemberPosition = {
-  id: string;
-  position_id: string;
-  positions?: { id: string; code: string; name: string } | null;
-};
-
-type TaskRow = {
+type Task = {
   id: string;
   task_code: string;
   task_name: string;
 };
 
-type SignoffRow = {
+type CallSignoff = {
   id: string;
   member_id: string;
-  position_id: string;
   task_id: string;
   evaluator_name?: string | null;
+  notes?: string | null;
   signed_at: string;
-  call_id?: string | null;
 };
 
-type SearchGroup = {
-  id: string;
-  name: string;
-  notes: string | null;
-  created_at: string;
-  training_session_id: string | null;
-  call_id: string | null;
-  search_group_members?: SearchGroupMember[];
-};
-
-type SearchGroupMember = {
-  id: string;
-  search_group_id: string;
-  member_id: string;
-  position_id: string | null;
-  is_trainee: boolean;
-  notes: string | null;
-  created_at: string;
-  members?: { first_name: string; last_name: string } | null;
-  positions?: { id: string; code: string; name: string } | null;
-};
-
-function asArray<T>(json: any): T[] {
+function asArray<T>(json: unknown): T[] {
   if (Array.isArray(json)) return json as T[];
-  return (json?.data ?? []) as T[];
+  return ((json as Record<string, unknown>)?.data ?? []) as T[];
 }
 
 function fmtDt(v?: string | null) {
-  if (!v) return "";
+  if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return String(v);
   return d.toLocaleString();
 }
 
-function isUuid(v: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    v
-  );
+/** Convert an ISO timestamp to the value expected by datetime-local inputs */
+function toDatetimeLocal(v?: string | null): string {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-const TYPE_OPTIONS = [
-  "Search",
-  "Rescue",
-  "Assist",
-  "Mutual Aid",
-  "Recovery",
-  "Standby",
-  "Other",
-] as const;
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+function statusBadge(status: string): React.CSSProperties {
+  const base: React.CSSProperties = {
+    fontSize: 12,
+    padding: "3px 10px",
+    borderRadius: 999,
+    fontWeight: 700,
+    display: "inline-block",
+    textTransform: "capitalize",
+  };
+  if (status === "open") return { ...base, background: "#dcfce7", border: "1px solid #86efac", color: "#14532d" };
+  if (status === "closed") return { ...base, background: "#eff6ff", border: "1px solid #93c5fd", color: "#1e3a8a" };
+  if (status === "cancelled") return { ...base, background: "#fff7ed", border: "1px solid #fdba74", color: "#7c2d12" };
+  return { ...base, background: "#f4f4f4", border: "1px solid #ddd", color: "#555" };
+}
 
 export default function CallDetailPage() {
   const params = useParams();
   const callId =
-    typeof (params as any)?.id === "string"
-      ? (params as any).id
-      : Array.isArray((params as any)?.id)
-      ? (params as any).id[0]
+    typeof (params as Record<string, unknown>)?.id === "string"
+      ? (params as Record<string, string>).id
+      : Array.isArray((params as Record<string, unknown>)?.id)
+      ? ((params as Record<string, string[]>).id)[0]
       : "";
 
   const [call, setCall] = useState<Call | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [attendance, setAttendance] = useState<Attendance[]>([]);
-  const [notes, setNotes] = useState<CallNote[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [callSignoffs, setCallSignoffs] = useState<CallSignoff[]>([]);
 
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [closing, setClosing] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const [geoSaveMsg, setGeoSaveMsg] = useState("");
 
-  const [noteText, setNoteText] = useState("");
+  // Per-row time edits: attendance.id → {time_in, time_out} as datetime-local strings
+  const [rowEdits, setRowEdits] = useState<Record<string, { time_in: string; time_out: string }>>({});
+  const [savingRow, setSavingRow] = useState("");
 
-  // ── Field teams (search groups) state ──
-  const [groups, setGroups] = useState<SearchGroup[]>([]);
-  const [newGroupName, setNewGroupName] = useState("");
-  const [groupMemberAdd, setGroupMemberAdd] = useState<
-    Record<string, { memberId: string; positionId: string; isTrainee: boolean }>
-  >({});
-  const [groupErr, setGroupErr] = useState<Record<string, string>>({});
-  const [allPositions, setAllPositions] = useState<
-    { id: string; code: string; name: string; position_type?: string }[]
-  >([]);
+  // Skill sign-off form
+  const [signoffForm, setSignoffForm] = useState({ member_id: "", task_id: "", evaluator_name: "", notes: "" });
+  const [busySignoff, setBusySignoff] = useState(false);
+  const [signoffMsg, setSignoffMsg] = useState("");
 
-  // ── Mission Competency state ──
-  const [compMemberId, setCompMemberId] = useState("");
-  const [compPositionId, setCompPositionId] = useState("");
-  const [compMemberPositions, setCompMemberPositions] = useState<MemberPosition[]>([]);
-  const [compTasks, setCompTasks] = useState<TaskRow[]>([]);
-  const [compSignoffs, setCompSignoffs] = useState<SignoffRow[]>([]); // signoffs for this call
-  const [compSelectedTaskIds, setCompSelectedTaskIds] = useState<Set<string>>(new Set());
-  const [compEvaluator, setCompEvaluator] = useState("");
-  const [compNotes, setCompNotes] = useState("");
+  // Sync rowEdits whenever attendance changes
+  useEffect(() => {
+    setRowEdits((prev) => {
+      const next: Record<string, { time_in: string; time_out: string }> = {};
+      for (const a of attendance) {
+        // Keep any in-progress edits; only initialise for new rows
+        next[a.id] = prev[a.id] ?? { time_in: toDatetimeLocal(a.time_in), time_out: toDatetimeLocal(a.time_out) };
+      }
+      return next;
+    });
+  }, [attendance]);
 
-  const selectedAttendance = useMemo(() => {
-    if (!selectedMemberId) return null;
-    return attendance.find((a) => a.member_id === selectedMemberId) ?? null;
-  }, [attendance, selectedMemberId]);
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setGeoSaveMsg("GPS not available on this device.");
+      return;
+    }
+    setGpsLoading(true);
+    setGeoSaveMsg("");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCall((c) => c ? {
+          ...c,
+          incident_lat: parseFloat(pos.coords.latitude.toFixed(6)),
+          incident_lng: parseFloat(pos.coords.longitude.toFixed(6)),
+        } : c);
+        setGpsLoading(false);
+      },
+      () => {
+        setGeoSaveMsg("Could not get location. Check browser permissions.");
+        setGpsLoading(false);
+      },
+      { timeout: 10000 }
+    );
+  }
 
-  const canArrive =
-    !!selectedMemberId && (!selectedAttendance || !selectedAttendance.time_in);
-  const canClear =
-    !!selectedMemberId &&
-    !!selectedAttendance?.time_in &&
-    !selectedAttendance?.time_out;
+  async function saveGeo() {
+    if (!call) return;
+    setBusy("geo");
+    setGeoSaveMsg("");
+    try {
+      const res = await fetch(`/api/calls/${callId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          incident_lat: call.incident_lat ?? null,
+          incident_lng: call.incident_lng ?? null,
+          incident_radius_m: call.incident_radius_m ?? null,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Save failed");
+      setCall(json?.data ?? call);
+      setGeoSaveMsg("Saved.");
+    } catch (e: unknown) {
+      setGeoSaveMsg((e as Error)?.message ?? "Error");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const selectedAttendance = useMemo(
+    () => attendance.find((a) => a.member_id === selectedMemberId) ?? null,
+    [attendance, selectedMemberId]
+  );
+  const canArrive = !!selectedMemberId && (!selectedAttendance || !selectedAttendance.time_in);
+  const canClear = !!selectedMemberId && !!selectedAttendance?.time_in && !selectedAttendance?.time_out;
 
   function memberName(id: string) {
     const m = members.find((x) => x.id === id);
@@ -179,25 +192,19 @@ export default function CallDetailPage() {
   }
 
   async function loadAll() {
-    if (!callId) return;
-
-    if (!isUuid(callId)) {
+    if (!callId || !isUuid(callId)) {
       setErr(`Bad call id in URL: "${callId}"`);
       return;
     }
-
     try {
       setBusy("reload");
       setErr("");
-
-      const [callRes, membersRes, attRes, notesRes, soRes, groupsRes, posRes] = await Promise.all([
+      const [callRes, membersRes, attRes, tasksRes, signoffsRes] = await Promise.all([
         fetch(`/api/calls/${callId}`),
         fetch(`/api/members`),
         fetch(`/api/calls/${callId}/attendance`),
-        fetch(`/api/calls/${callId}/notes`),
+        fetch(`/api/tasks`),
         fetch(`/api/member-task-signoffs?call_id=${callId}`),
-        fetch(`/api/search-groups?call_id=${callId}`),
-        fetch(`/api/positions`),
       ]);
 
       const callJson = await callRes.json().catch(() => ({}));
@@ -210,16 +217,13 @@ export default function CallDetailPage() {
       const attJson = await attRes.json().catch(() => ([]));
       setAttendance(asArray<Attendance>(attJson));
 
-      const notesJson = await notesRes.json().catch(() => ([]));
-      setNotes(asArray<CallNote>(notesJson));
+      const tasksJson = await tasksRes.json().catch(() => ({}));
+      setTasks(tasksJson.data ?? []);
 
-      const soJson = await soRes.json().catch(() => ([]));
-      setCompSignoffs(asArray<SignoffRow>(soJson));
-
-      setGroups(asArray<SearchGroup>(await groupsRes.json().catch(() => [])));
-      setAllPositions(asArray<{ id: string; code: string; name: string; position_type?: string }>(await posRes.json().catch(() => [])));
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
+      const signoffsJson = await signoffsRes.json().catch(() => ({}));
+      setCallSignoffs(signoffsJson.data ?? []);
+    } catch (e: unknown) {
+      setErr((e as Error)?.message ?? String(e));
     } finally {
       setBusy("");
     }
@@ -230,773 +234,589 @@ export default function CallDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callId]);
 
-  // Load member's positions when competency member changes
-  useEffect(() => {
-    setCompPositionId("");
-    setCompTasks([]);
-    setCompSelectedTaskIds(new Set());
-    if (!compMemberId || !isUuid(compMemberId)) { setCompMemberPositions([]); return; }
-    fetch(`/api/member-positions?member_id=${compMemberId}`)
-      .then((r) => r.json())
-      .then((j) => setCompMemberPositions(asArray<MemberPosition>(j)))
-      .catch(() => setCompMemberPositions([]));
-  }, [compMemberId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Load tasks when competency position changes
-  useEffect(() => {
-    setCompTasks([]);
-    setCompSelectedTaskIds(new Set());
-    if (!compPositionId || !isUuid(compPositionId)) return;
-    fetch(`/api/positions/${compPositionId}/requirements`)
-      .then((r) => r.json())
-      .then((j) => setCompTasks(j?.data?.tasks ?? []))
-      .catch(() => setCompTasks([]));
-  }, [compPositionId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function signOffMissionTask(taskId: string) {
-    if (!compMemberId || !compPositionId) return;
-    setBusy("signoff");
-    try {
-      const res = await fetch("/api/member-task-signoffs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          member_id: compMemberId,
-          position_id: compPositionId,
-          task_id: taskId,
-          call_id: callId,
-          evaluator_name: compEvaluator || null,
-          notes: compNotes || null,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error ?? "Sign-off failed");
-      setCompSignoffs((prev) => [json.data, ...prev]);
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  // ── Field teams ────────────────────────────────────────────────────────────
-
-  async function addGroup() {
-    if (!newGroupName.trim()) return;
-    setBusy("grp-add");
-    try {
-      const res = await fetch("/api/search-groups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ call_id: callId, name: newGroupName.trim() }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error ?? "Failed to create group");
-      setGroups((prev) => [...prev, json.data]);
-      setNewGroupName("");
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function deleteGroup(id: string) {
-    setBusy("grp-del-" + id);
-    try {
-      const res = await fetch(`/api/search-groups?id=${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error ?? "Delete failed");
-      }
-      setGroups((prev) => prev.filter((g) => g.id !== id));
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function addMemberToGroup(groupId: string) {
-    const form = groupMemberAdd[groupId];
-    if (!form?.memberId) return;
-    setGroupErr((prev) => ({ ...prev, [groupId]: "" }));
-    setBusy("sgm-add-" + groupId);
-    try {
-      const res = await fetch("/api/search-group-members", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          search_group_id: groupId,
-          member_id: form.memberId,
-          position_id: form.positionId || null,
-          is_trainee: form.isTrainee ?? false,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        if (json?.code === "NOT_QUALIFIED") {
-          setGroupErr((prev) => ({ ...prev, [groupId]: json.error }));
-        } else {
-          throw new Error(json?.error ?? "Failed to add member");
-        }
-        return;
-      }
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === groupId
-            ? { ...g, search_group_members: [...(g.search_group_members ?? []), json.data] }
-            : g
-        )
-      );
-      setGroupMemberAdd((prev) => ({ ...prev, [groupId]: { memberId: "", positionId: "", isTrainee: false } }));
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function removeMemberFromGroup(sgmId: string, groupId: string) {
-    setBusy("sgm-del-" + sgmId);
-    try {
-      const res = await fetch(`/api/search-group-members?id=${sgmId}`, { method: "DELETE" });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        throw new Error(json?.error ?? "Delete failed");
-      }
-      setGroups((prev) =>
-        prev.map((g) =>
-          g.id === groupId
-            ? { ...g, search_group_members: (g.search_group_members ?? []).filter((m) => m.id !== sgmId) }
-            : g
-        )
-      );
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function saveCall() {
-    if (!call) return;
-
-    // enforce Other rules client-side
-    if ((call.type ?? "") === "Other" && !(call.type_other ?? "").trim()) {
-      alert("Please specify type_other when Type = Other.");
-      return;
-    }
-
-    try {
-      setBusy("save");
-      setErr("");
-
-      const res = await fetch(`/api/calls/${callId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: call.title,
-          type: call.type,
-          type_other: call.type === "Other" ? call.type_other : null,
-          location_text: call.location_text,
-          summary: call.summary,
-          visibility: call.visibility,
-          status: call.status,
-
-          // staging/incident location fields (for later geo-checkin)
-          incident_lat: call.incident_lat,
-          incident_lng: call.incident_lng,
-          incident_radius_m: call.incident_radius_m,
-        }),
-      });
-
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error ?? "Save failed");
-
-      setCall(json?.data ?? null);
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function addNote() {
-    if (!noteText.trim()) return;
-    try {
-      setBusy("addNote");
-      setErr("");
-
-      const res = await fetch(`/api/calls/${callId}/notes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note_text: noteText.trim() }),
-      });
-
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json?.error ?? "Add note failed");
-
-      setNotes(asArray<CallNote>(json));
-      setNoteText("");
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function postAttendance(action?: "arrive" | "clear") {
     if (!selectedMemberId) return;
-
     try {
       setBusy(action === "arrive" ? "arrive" : action === "clear" ? "clear" : "add");
-
       const res = await fetch(`/api/calls/${callId}/attendance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ member_id: selectedMemberId, ...(action ? { action } : {}) }),
       });
-
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Attendance update failed");
-
       setAttendance(asArray<Attendance>(json));
-    } catch (e: any) {
-      alert(e?.message ?? String(e));
+    } catch (e: unknown) {
+      alert((e as Error)?.message ?? String(e));
     } finally {
       setBusy("");
     }
   }
 
+  async function saveRowTime(attendanceId: string) {
+    const edit = rowEdits[attendanceId];
+    if (!edit) return;
+    setSavingRow(attendanceId);
+    try {
+      const time_in = edit.time_in ? new Date(edit.time_in).toISOString() : null;
+      const time_out = edit.time_out ? new Date(edit.time_out).toISOString() : null;
+      const res = await fetch(`/api/calls/${callId}/attendance`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attendance_id: attendanceId, time_in, time_out }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Save failed");
+      setAttendance(asArray<Attendance>(json));
+    } catch (e: unknown) {
+      alert((e as Error)?.message ?? String(e));
+    } finally {
+      setSavingRow("");
+    }
+  }
+
+  async function closeCall() {
+    if (!call) return;
+    setClosing(true);
+    try {
+      const res = await fetch(`/api/calls/${callId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "closed", end_dt: new Date().toISOString() }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Close failed");
+      setCall(json?.data ?? call);
+    } catch (e: unknown) {
+      alert((e as Error)?.message ?? String(e));
+    } finally {
+      setClosing(false);
+    }
+  }
+
+  async function addSignoff(e: React.FormEvent) {
+    e.preventDefault();
+    setBusySignoff(true);
+    setSignoffMsg("");
+    try {
+      const res = await fetch("/api/member-task-signoffs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          member_id: signoffForm.member_id,
+          task_id: signoffForm.task_id,
+          call_id: callId,
+          evaluator_name: signoffForm.evaluator_name || undefined,
+          notes: signoffForm.notes || undefined,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setSignoffMsg(json?.error ?? "Failed to record skill"); return; }
+      // Reload signoffs
+      const soRes = await fetch(`/api/member-task-signoffs?call_id=${callId}`);
+      const soJson = await soRes.json().catch(() => ({}));
+      setCallSignoffs(soJson.data ?? []);
+      setSignoffForm((f) => ({ ...f, task_id: "", notes: "" }));
+      setSignoffMsg("Skill recorded.");
+    } finally {
+      setBusySignoff(false);
+    }
+  }
+
+  // Members who attended the call (have time_in)
+  const attendingMembers = useMemo(() => {
+    return attendance
+      .filter((a) => a.time_in)
+      .map((a) => {
+        const m = members.find((x) => x.id === a.member_id);
+        return { ...a, member: m ?? null };
+      });
+  }, [attendance, members]);
+
   if (!call && !err) {
     return <main style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</main>;
   }
 
+  const status = (call?.status ?? "open").toLowerCase();
+  const isClosed = status === "closed";
+
   return (
-    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 1000 }}>
-      <p>
+    <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 900 }}>
+      <p style={{ marginTop: 0 }}>
         <a href="/calls">← Back to Calls</a>
       </p>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-        <h1 style={{ margin: 0 }}>Call Detail</h1>
-        <span style={{ opacity: 0.7, fontSize: 12 }}>{callId}</span>
-        <button
-          type="button"
-          onClick={loadAll}
-          disabled={busy !== ""}
-          style={{ marginLeft: "auto" }}
-        >
-          {busy === "reload" ? "Refreshing…" : "Refresh"}
-        </button>
-      </div>
-
-      {err ? (
-        <div
-          style={{
-            marginTop: 10,
-            padding: 10,
-            border: "1px solid #eee",
-            borderRadius: 8,
-            background: "#fafafa",
-          }}
-        >
+      {err && (
+        <div style={{ padding: 10, border: "1px solid #eee", borderRadius: 8, background: "#fafafa", marginBottom: 12 }}>
           <strong>Error:</strong> {err}
         </div>
-      ) : null}
+      )}
 
-      {call ? (
+      {call && (
         <>
-          {/* Editable call fields */}
-          <section style={{ marginTop: 16, padding: 14, border: "1px solid #e5e5e5", borderRadius: 10 }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                Status:
-                <select
-                  value={(call.status ?? "open") as any}
-                  onChange={(e) => setCall({ ...call, status: e.target.value })}
-                >
-                  <option value="open">open</option>
-                  <option value="closed">closed</option>
-                  <option value="cancelled">cancelled</option>
-                  <option value="archived">archived</option>
-                </select>
-              </label>
-
-              <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                Visibility:
-                <select
-                  value={(call.visibility ?? "members") as any}
-                  onChange={(e) => setCall({ ...call, visibility: e.target.value })}
-                >
-                  <option value="members">members</option>
-                  <option value="public">public</option>
-                </select>
-              </label>
-
-              {call.is_test ? (
-                <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>
-                  TEST
-                </span>
-              ) : null}
-
-              <span style={{ opacity: 0.75, fontSize: 12 }}>
-                Start: {call.start_dt ? fmtDt(call.start_dt) : "—"}
-              </span>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Title</div>
-                <input
-                  style={{ width: "100%", padding: 8 }}
-                  value={call.title ?? ""}
-                  onChange={(e) => setCall({ ...call, title: e.target.value })}
-                  placeholder="Case name / incident title"
-                />
+          {/* Header */}
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 16 }}>
+            <div style={{ flex: 1 }}>
+              <h1 style={{ margin: "0 0 6px" }}>{call.title ?? "(Untitled)"}</h1>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={statusBadge(status)}>{status}</span>
+                <span style={{ fontSize: 13, opacity: 0.7 }}>Start: {fmtDt(call.start_dt)}</span>
+                {call.end_dt && <span style={{ fontSize: 13, opacity: 0.7 }}>End: {fmtDt(call.end_dt)}</span>}
               </div>
-
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Type</div>
-                <select
-                  style={{ width: "100%", padding: 8 }}
-                  value={call.type ?? ""}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    setCall({
-                      ...call,
-                      type: t,
-                      type_other: t === "Other" ? (call.type_other ?? "") : null,
-                    });
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                onClick={loadAll}
+                disabled={busy !== ""}
+                style={{ fontSize: 13, padding: "6px 12px" }}
+              >
+                {busy === "reload" ? "Refreshing…" : "Refresh"}
+              </button>
+              {!isClosed && (
+                <button
+                  type="button"
+                  onClick={closeCall}
+                  disabled={closing}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #dc2626",
+                    background: "#fef2f2",
+                    color: "#dc2626",
+                    fontWeight: 600,
+                    cursor: "pointer",
                   }}
                 >
-                  <option value="">Select type…</option>
-                  {TYPE_OPTIONS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
+                  {closing ? "Closing…" : "Close Call"}
+                </button>
+              )}
+            </div>
+          </div>
 
-                {call.type === "Other" ? (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Type (Other)</div>
-                    <input
-                      style={{ width: "100%", padding: 8 }}
-                      value={call.type_other ?? ""}
-                      onChange={(e) => setCall({ ...call, type_other: e.target.value })}
-                      placeholder="Specify type"
-                    />
-                  </div>
-                ) : null}
+          {/* Info section */}
+          <section style={{ padding: 14, border: "1px solid #e5e5e5", borderRadius: 10, marginBottom: 16 }}>
+            {call.summary && (
+              <div style={{ fontSize: 13, marginBottom: 12, whiteSpace: "pre-wrap", opacity: 0.85 }}>
+                {call.summary}
               </div>
+            )}
 
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Location</div>
-                <input
-                  style={{ width: "100%", padding: 8 }}
-                  value={call.location_text ?? ""}
-                  onChange={(e) => setCall({ ...call, location_text: e.target.value })}
-                  placeholder="Staging / trailhead / mile marker / etc."
-                />
-              </div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Geofence</div>
+            <p style={{ fontSize: 12, opacity: 0.6, margin: "0 0 10px" }}>
+              Members must be within the radius to self check-in. Leave blank to disable.
+            </p>
 
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Summary</div>
-                <input
-                  style={{ width: "100%", padding: 8 }}
-                  value={call.summary ?? ""}
-                  onChange={(e) => setCall({ ...call, summary: e.target.value })}
-                  placeholder="Short notes"
-                />
-              </div>
+            <div style={{ marginBottom: 10 }}>
+              <button
+                type="button"
+                onClick={useMyLocation}
+                disabled={gpsLoading || busy === "geo"}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, cursor: "pointer" }}
+              >
+                {gpsLoading ? "Getting location…" : "📍 Use my location"}
+              </button>
             </div>
 
-            {/* Staging location fields (for future geolocation check-in) */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Staging Lat (optional)</div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, opacity: 0.65, marginBottom: 3 }}>
+                  Incident Lat
+                </label>
                 <input
-                  style={{ width: "100%", padding: 8 }}
                   value={call.incident_lat ?? ""}
-                  onChange={(e) =>
-                    setCall({ ...call, incident_lat: e.target.value === "" ? null : Number(e.target.value) })
-                  }
+                  onChange={(e) => setCall({ ...call, incident_lat: e.target.value === "" ? null : Number(e.target.value) })}
                   placeholder="e.g. 41.12345"
+                  style={{ width: "100%", padding: "7px 8px", borderRadius: 7, border: "1px solid #ddd", fontSize: 13 }}
                 />
               </div>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Staging Lng (optional)</div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, opacity: 0.65, marginBottom: 3 }}>
+                  Incident Lng
+                </label>
                 <input
-                  style={{ width: "100%", padding: 8 }}
                   value={call.incident_lng ?? ""}
-                  onChange={(e) =>
-                    setCall({ ...call, incident_lng: e.target.value === "" ? null : Number(e.target.value) })
-                  }
+                  onChange={(e) => setCall({ ...call, incident_lng: e.target.value === "" ? null : Number(e.target.value) })}
                   placeholder="e.g. -74.12345"
+                  style={{ width: "100%", padding: "7px 8px", borderRadius: 7, border: "1px solid #ddd", fontSize: 13 }}
                 />
               </div>
               <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Radius m</div>
+                <label style={{ display: "block", fontSize: 11, fontWeight: 600, opacity: 0.65, marginBottom: 3 }}>
+                  Radius (m)
+                </label>
                 <input
-                  style={{ width: "100%", padding: 8 }}
-                  value={call.incident_radius_m ?? 600}
-                  onChange={(e) =>
-                    setCall({
-                      ...call,
-                      incident_radius_m: e.target.value === "" ? null : Number(e.target.value),
-                    })
-                  }
+                  type="number"
+                  min={50}
+                  value={call.incident_radius_m ?? ""}
+                  onChange={(e) => setCall({ ...call, incident_radius_m: e.target.value === "" ? null : Number(e.target.value) })}
+                  placeholder="500"
+                  style={{ width: "100%", padding: "7px 8px", borderRadius: 7, border: "1px solid #ddd", fontSize: 13 }}
                 />
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-              <button type="button" onClick={saveCall} disabled={busy !== ""}>
-                {busy === "save" ? "Saving…" : "Save Call"}
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <button
+                type="button"
+                onClick={saveGeo}
+                disabled={busy === "geo" || gpsLoading}
+                style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, cursor: "pointer" }}
+              >
+                {busy === "geo" ? "Saving…" : "Save Geofence"}
               </button>
-            </div>
-          </section>
-
-          {/* Notes / narrative log */}
-          <section style={{ marginTop: 16, padding: 14, border: "1px solid #e5e5e5", borderRadius: 10 }}>
-            <h2 style={{ marginTop: 0 }}>Narrative / Notes (timestamped)</h2>
-
-            <textarea
-              style={{ width: "100%", minHeight: 90, padding: 10 }}
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Add a time-stamped narrative entry (append-only)…"
-            />
-
-            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
-              <button type="button" onClick={addNote} disabled={busy !== "" || !noteText.trim()}>
-                {busy === "addNote" ? "Adding…" : "Add Note"}
-              </button>
-            </div>
-
-            <div style={{ marginTop: 12 }}>
-              {notes.length === 0 ? (
-                <p style={{ opacity: 0.7 }}>No notes yet.</p>
-              ) : (
-                <ul style={{ paddingLeft: 18 }}>
-                  {notes.map((n) => (
-                    <li key={n.id} style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 12, opacity: 0.75 }}>{fmtDt(n.created_at)}</div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{n.note_text}</div>
-                    </li>
-                  ))}
-                </ul>
+              {geoSaveMsg && (
+                <span style={{ fontSize: 12, color: geoSaveMsg === "Saved." ? "#15803d" : "#dc2626" }}>
+                  {geoSaveMsg}
+                </span>
               )}
             </div>
           </section>
 
-          {/* Attendance */}
-          <section style={{ marginTop: 16, padding: 14, border: "1px solid #e5e5e5", borderRadius: 10 }}>
-            <h2 style={{ marginTop: 0 }}>Attendance</h2>
+          {/* Attendance section */}
+          <section style={{ padding: 14, border: "1px solid #e5e5e5", borderRadius: 10, marginBottom: 16 }}>
+            <h2 style={{ marginTop: 0, fontSize: 16 }}>
+              Attendance
+              <span style={{ fontSize: 13, fontWeight: 400, opacity: 0.65, marginLeft: 8 }}>
+                ({attendance.length} records)
+              </span>
+            </h2>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <select value={selectedMemberId} onChange={(e) => setSelectedMemberId(e.target.value)}>
-                <option value="">Select member</option>
+            {/* Admin controls — available on both open and closed calls */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+              <select
+                value={selectedMemberId}
+                onChange={(e) => setSelectedMemberId(e.target.value)}
+                style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+              >
+                <option value="">Select member…</option>
                 {members.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.first_name} {m.last_name}
                   </option>
                 ))}
               </select>
-
-              <button onClick={() => postAttendance()} disabled={!selectedMemberId || busy !== ""}>
+              <button onClick={() => postAttendance()} disabled={!selectedMemberId || busy !== ""} style={{ fontSize: 13 }}>
                 {busy === "add" ? "Adding…" : "Add"}
               </button>
-
-              <button onClick={() => postAttendance("arrive")} disabled={!canArrive || busy !== ""}>
-                {busy === "arrive" ? "Arriving…" : "Arrived"}
+              <button onClick={() => postAttendance("arrive")} disabled={!canArrive || busy !== ""} style={{ fontSize: 13 }}>
+                {busy === "arrive" ? "…" : "Mark Arrived"}
               </button>
-
-              <button onClick={() => postAttendance("clear")} disabled={!canClear || busy !== ""}>
-                {busy === "clear" ? "Clearing…" : "Cleared"}
+              <button onClick={() => postAttendance("clear")} disabled={!canClear || busy !== ""} style={{ fontSize: 13 }}>
+                {busy === "clear" ? "…" : "Mark Cleared"}
               </button>
             </div>
 
-            <ul style={{ marginTop: 12, paddingLeft: 18 }}>
-              {attendance.map((a) => (
-                <li key={a.id} style={{ marginBottom: 8 }}>
-                  <strong>{memberName(a.member_id)}</strong>
-                  {a.role_on_call ? ` — ${a.role_on_call}` : ""}
-                  {a.time_in ? ` | in: ${fmtDt(a.time_in)}` : ""}
-                  {a.time_out ? ` | out: ${fmtDt(a.time_out)}` : ""}
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          {/* ── Field Teams ── */}
-          <section style={{ marginTop: 16, padding: 14, border: "1px solid #e5e5e5", borderRadius: 10 }}>
-            <h2 style={{ marginTop: 0 }}>Field Teams <span style={{ fontSize: 13, fontWeight: 400, opacity: 0.65 }}>({groups.length})</span></h2>
-
-            {/* Add group form */}
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-              <input
-                style={{ flex: 1, padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-                placeholder="Team name (e.g. Team Alpha)"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addGroup(); }}
-              />
-              <button type="button" onClick={addGroup} disabled={!newGroupName.trim() || busy !== ""}>
-                {busy === "grp-add" ? "Adding…" : "Add Team"}
-              </button>
-            </div>
-
-            {groups.length === 0 ? (
-              <p style={{ fontSize: 12, opacity: 0.65 }}>No field teams yet.</p>
+            {attendance.length === 0 ? (
+              <p style={{ fontSize: 13, opacity: 0.65 }}>No attendance records yet.</p>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                {groups.map((g) => {
-                  const gMembers = g.search_group_members ?? [];
-                  const memberIdsInGroup = new Set(gMembers.map((m) => m.member_id));
-                  const form = groupMemberAdd[g.id] ?? { memberId: "", positionId: "", isTrainee: false };
-                  const fieldRolePositions = allPositions.filter((p) => p.position_type === "field_role");
-                  const errMsg = groupErr[g.id];
-
-                  return (
-                    <div key={g.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-                      {/* Group header */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <strong style={{ fontSize: 14 }}>{g.name}</strong>
-                        <button
-                          type="button"
-                          onClick={() => deleteGroup(g.id)}
-                          disabled={busy !== ""}
-                          style={{ fontSize: 12, padding: "2px 8px" }}
-                        >
-                          Delete Team
-                        </button>
-                      </div>
-
-                      {/* Error banner */}
-                      {errMsg ? (
-                        <div style={{ marginBottom: 8, padding: "6px 10px", background: "#fff0f0", border: "1px solid #f5b7b1", borderRadius: 6, fontSize: 12, color: "#c0392b" }}>
-                          {errMsg}
-                        </div>
-                      ) : null}
-
-                      {/* Member list */}
-                      {gMembers.length > 0 ? (
-                        <ul style={{ paddingLeft: 0, listStyle: "none", marginBottom: 10 }}>
-                          {gMembers.map((m) => {
-                            const name = m.members
-                              ? `${m.members.first_name} ${m.members.last_name}`
-                              : m.member_id;
-                            return (
-                              <li key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 0", borderBottom: "1px solid #f0f0f0", fontSize: 13 }}>
-                                <div>
-                                  <strong>{name}</strong>
-                                  {m.positions ? (
-                                    <span style={{ fontSize: 12, opacity: 0.65, marginLeft: 8 }}>{m.positions.code}</span>
-                                  ) : null}
-                                  <span style={{
-                                    marginLeft: 8, fontSize: 11, padding: "1px 6px",
-                                    border: "1px solid #ddd", borderRadius: 999,
-                                    background: m.is_trainee ? "#fffbe6" : "#e6f7e6",
-                                  }}>
-                                    {m.is_trainee ? "trainee" : "qualified"}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeMemberFromGroup(m.id, g.id)}
-                                  disabled={busy !== ""}
-                                  style={{ fontSize: 11, padding: "1px 7px" }}
-                                >
-                                  Remove
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      ) : (
-                        <p style={{ fontSize: 12, opacity: 0.65, marginBottom: 8 }}>No members assigned.</p>
-                      )}
-
-                      {/* Add member sub-form */}
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                        <select
-                          style={{ flex: 1, minWidth: 140, padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-                          value={form.memberId}
-                          onChange={(e) => {
-                            setGroupErr((prev) => ({ ...prev, [g.id]: "" }));
-                            setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, memberId: e.target.value } }));
-                          }}
-                        >
-                          <option value="">Assign member…</option>
-                          {attendance
-                            .filter((a) => !memberIdsInGroup.has(a.member_id))
-                            .map((a) => {
-                              const name = memberName(a.member_id);
-                              return <option key={a.member_id} value={a.member_id}>{name}</option>;
-                            })}
-                        </select>
-                        <select
-                          style={{ flex: 1, minWidth: 140, padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-                          value={form.positionId}
-                          onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, positionId: e.target.value } }))}
-                        >
-                          <option value="">Role (optional)…</option>
-                          {fieldRolePositions.map((p) => (
-                            <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-                          ))}
-                        </select>
-                        <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, whiteSpace: "nowrap" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Member</th>
+                    <th style={thStyle}>Time In</th>
+                    <th style={thStyle}>Time Out</th>
+                    <th style={thStyle}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.map((a) => {
+                    const edit = rowEdits[a.id] ?? { time_in: "", time_out: "" };
+                    const isSaving = savingRow === a.id;
+                    const isDirty =
+                      edit.time_in !== toDatetimeLocal(a.time_in) ||
+                      edit.time_out !== toDatetimeLocal(a.time_out);
+                    return (
+                      <tr key={a.id}>
+                        <td style={tdStyle}>
+                          <strong>{memberName(a.member_id)}</strong>
+                          {a.time_in && !a.time_out && (
+                            <span
+                              style={{
+                                marginLeft: 8,
+                                fontSize: 11,
+                                padding: "1px 7px",
+                                borderRadius: 999,
+                                background: "#dcfce7",
+                                border: "1px solid #86efac",
+                                color: "#15803d",
+                                fontWeight: 600,
+                              }}
+                            >
+                              On Site
+                            </span>
+                          )}
+                        </td>
+                        <td style={tdStyle}>
                           <input
-                            type="checkbox"
-                            checked={form.isTrainee ?? false}
-                            onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, isTrainee: e.target.checked } }))}
+                            type="datetime-local"
+                            value={edit.time_in}
+                            onChange={(e) =>
+                              setRowEdits((prev) => ({
+                                ...prev,
+                                [a.id]: { ...edit, time_in: e.target.value },
+                              }))
+                            }
+                            style={timeInputStyle}
                           />
-                          Assign as trainee (not yet qualified for this role)
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => addMemberToGroup(g.id)}
-                          disabled={!form.memberId || busy !== ""}
-                          style={{ whiteSpace: "nowrap" }}
-                        >
-                          {busy === "sgm-add-" + g.id ? "Adding…" : "Assign"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                        </td>
+                        <td style={tdStyle}>
+                          <input
+                            type="datetime-local"
+                            value={edit.time_out}
+                            onChange={(e) =>
+                              setRowEdits((prev) => ({
+                                ...prev,
+                                [a.id]: { ...edit, time_out: e.target.value },
+                              }))
+                            }
+                            style={timeInputStyle}
+                          />
+                        </td>
+                        <td style={tdStyle}>
+                          {isDirty && (
+                            <button
+                              type="button"
+                              onClick={() => saveRowTime(a.id)}
+                              disabled={isSaving}
+                              style={{
+                                fontSize: 12,
+                                padding: "3px 10px",
+                                borderRadius: 6,
+                                border: "1px solid #93c5fd",
+                                background: "#eff6ff",
+                                color: "#1e40af",
+                                cursor: "pointer",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {isSaving ? "Saving…" : "Save"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             )}
           </section>
 
-          {/* ── Mission Competency Sign-offs ── */}
-          <section style={{ marginTop: 16, padding: 14, border: "1px solid #e5e5e5", borderRadius: 10 }}>
-            <h2 style={{ marginTop: 0 }}>Mission Competency Sign-offs</h2>
-            <p style={{ fontSize: 12, opacity: 0.65, marginTop: 0 }}>
-              Record task sign-offs observed during this mission. Select a member on this call, their position, and the tasks demonstrated.
-            </p>
+          {/* Post-call section (closed only) */}
+          {isClosed && (
+            <section style={{ padding: 14, border: "1px solid #e5e5e5", borderRadius: 10, marginBottom: 16, background: "#fafafa" }}>
+              <h2 style={{ marginTop: 0, fontSize: 16 }}>Post-Call Summary</h2>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Member</div>
-                <select
-                  value={compMemberId}
-                  onChange={(e) => setCompMemberId(e.target.value)}
-                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-                >
-                  <option value="">Select member…</option>
-                  {attendance.map((a) => (
-                    <option key={a.member_id} value={a.member_id}>{memberName(a.member_id)}</option>
-                  ))}
-                </select>
-              </div>
+              {attendingMembers.length === 0 ? (
+                <p style={{ fontSize: 13, opacity: 0.65 }}>No members attended this call.</p>
+              ) : (
+                <>
+                  <p style={{ fontSize: 12, opacity: 0.65, marginTop: 0 }}>
+                    Members who attended with their field roles and certifications:
+                  </p>
+                  <ul style={{ paddingLeft: 0, listStyle: "none", margin: "0 0 20px" }}>
+                    {attendingMembers.map((a) => {
+                      const m = a.member;
+                      const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
+                      const fieldRoles = m?.field_roles ?? [];
+                      const certs = m?.roster_certs ?? [];
+                      return (
+                        <li
+                          key={a.id}
+                          style={{
+                            padding: "8px 0",
+                            borderBottom: "1px solid #eee",
+                            display: "flex",
+                            gap: 10,
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            fontSize: 13,
+                          }}
+                        >
+                          <strong style={{ minWidth: 160 }}>{name}</strong>
+                          <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                            {fieldRoles.map((code) => (
+                              <span
+                                key={code}
+                                style={{
+                                  fontSize: 11,
+                                  padding: "1px 8px",
+                                  borderRadius: 999,
+                                  background: "#f0fdf4",
+                                  border: "1px solid #86efac",
+                                  color: "#15803d",
+                                }}
+                              >
+                                {code}
+                              </span>
+                            ))}
+                            {certs.map((code) => (
+                              <span
+                                key={code}
+                                style={{
+                                  fontSize: 11,
+                                  padding: "1px 8px",
+                                  borderRadius: 999,
+                                  background: "#eff6ff",
+                                  border: "1px solid #93c5fd",
+                                  color: "#1e3a8a",
+                                }}
+                              >
+                                {code}
+                              </span>
+                            ))}
+                            {fieldRoles.length === 0 && certs.length === 0 && (
+                              <span style={{ opacity: 0.45 }}>—</span>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
+              )}
 
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Position</div>
-                <select
-                  value={compPositionId}
-                  onChange={(e) => setCompPositionId(e.target.value)}
-                  disabled={!compMemberId}
-                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-                >
-                  <option value="">Select position…</option>
-                  {compMemberPositions.map((mp) => (
-                    <option key={mp.position_id} value={mp.position_id}>
-                      {(mp.positions as any)?.code} — {(mp.positions as any)?.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* Skill Sign-offs */}
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>
+                Skill Sign-offs
+                <span style={{ fontWeight: 400, opacity: 0.6, fontSize: 13, marginLeft: 8 }}>
+                  ({callSignoffs.length})
+                </span>
+              </h3>
 
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Evaluator name</div>
-                <input
-                  value={compEvaluator}
-                  onChange={(e) => setCompEvaluator(e.target.value)}
-                  placeholder="Optional"
-                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-                />
-              </div>
-
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Notes</div>
-                <input
-                  value={compNotes}
-                  onChange={(e) => setCompNotes(e.target.value)}
-                  placeholder="Optional"
-                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-                />
-              </div>
-            </div>
-
-            {compPositionId && compTasks.length > 0 ? (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, opacity: 0.8 }}>Tasks</div>
-                <ul style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
-                  {compTasks.map((t) => {
-                    const signed = compSignoffs.some(
-                      (s) => s.member_id === compMemberId && s.task_id === t.id
-                    );
+              {callSignoffs.length > 0 && (
+                <ul style={{ paddingLeft: 0, listStyle: "none", margin: "0 0 14px" }}>
+                  {callSignoffs.map((s) => {
+                    const task = tasks.find((t) => t.id === s.task_id);
                     return (
-                      <li key={t.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ fontSize: 13 }}>
-                          {signed ? (
-                            <span style={{ color: "#1a7f3c", marginRight: 6 }}>✓</span>
-                          ) : (
-                            <span style={{ marginRight: 6, opacity: 0.3 }}>○</span>
-                          )}
-                          <strong>{t.task_code}</strong>
-                          <span style={{ opacity: 0.65, marginLeft: 6 }}>{t.task_name}</span>
-                        </div>
-                        {!signed ? (
-                          <button
-                            type="button"
-                            onClick={() => signOffMissionTask(t.id)}
-                            disabled={busy !== ""}
-                            style={{ fontSize: 12, padding: "3px 10px", cursor: "pointer", borderRadius: 6, border: "1px solid #ddd" }}
-                          >
-                            {busy === "signoff" ? "…" : "Sign Off"}
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: 11, opacity: 0.5 }}>
-                            {(() => {
-                              const s = compSignoffs.find((s) => s.member_id === compMemberId && s.task_id === t.id);
-                              return s ? `${s.evaluator_name ?? "Signed"} · ${new Date(s.signed_at).toLocaleDateString()}` : "Signed";
-                            })()}
-                          </span>
+                      <li
+                        key={s.id}
+                        style={{
+                          display: "flex",
+                          gap: 10,
+                          alignItems: "center",
+                          padding: "6px 0",
+                          borderBottom: "1px solid #eee",
+                          fontSize: 13,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <span style={{ color: "#1a7f3c", fontWeight: 700 }}>✓</span>
+                        <strong style={{ minWidth: 140 }}>{memberName(s.member_id)}</strong>
+                        <span style={{ flex: 1 }}>
+                          {task ? `${task.task_code} — ${task.task_name}` : s.task_id}
+                        </span>
+                        {s.evaluator_name && (
+                          <span style={{ fontSize: 12, opacity: 0.6 }}>by {s.evaluator_name}</span>
                         )}
+                        {s.notes && <span style={{ fontSize: 12, opacity: 0.6 }}>· {s.notes}</span>}
+                        <span style={{ fontSize: 12, opacity: 0.5 }}>{new Date(s.signed_at).toLocaleDateString()}</span>
                       </li>
                     );
                   })}
                 </ul>
-              </div>
-            ) : compPositionId ? (
-              <p style={{ fontSize: 12, opacity: 0.65, marginTop: 10 }}>No tasks defined for this position.</p>
-            ) : null}
+              )}
 
-            {compSignoffs.length > 0 ? (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7, marginBottom: 6 }}>
-                  All sign-offs on this call ({compSignoffs.length})
-                </div>
-                <ul style={{ paddingLeft: 0, listStyle: "none", margin: 0 }}>
-                  {compSignoffs.map((s) => (
-                    <li key={s.id} style={{ fontSize: 12, padding: "4px 0", borderBottom: "1px solid #f5f5f5", opacity: 0.85 }}>
-                      <strong>{memberName(s.member_id)}</strong>
-                      <span style={{ opacity: 0.65, marginLeft: 6 }}>task {s.task_id.slice(0, 8)}…</span>
-                      {s.evaluator_name ? <span style={{ opacity: 0.65 }}> · {s.evaluator_name}</span> : null}
-                      <span style={{ opacity: 0.5, marginLeft: 6 }}>{new Date(s.signed_at).toLocaleString()}</span>
-                    </li>
+              {/* Add sign-off form */}
+              <form onSubmit={addSignoff} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <select
+                  value={signoffForm.member_id}
+                  onChange={(e) => setSignoffForm((f) => ({ ...f, member_id: e.target.value }))}
+                  style={selectStyle}
+                  required
+                >
+                  <option value="">Select member…</option>
+                  {attendingMembers.map((a) => {
+                    const m = a.member;
+                    const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
+                    return <option key={a.member_id} value={a.member_id}>{name}</option>;
+                  })}
+                </select>
+
+                <select
+                  value={signoffForm.task_id}
+                  onChange={(e) => setSignoffForm((f) => ({ ...f, task_id: e.target.value }))}
+                  style={{ ...selectStyle, flex: 1, minWidth: 200 }}
+                  required
+                >
+                  <option value="">Select skill…</option>
+                  {tasks.map((t) => (
+                    <option key={t.id} value={t.id}>{t.task_code} — {t.task_name}</option>
                   ))}
-                </ul>
-              </div>
-            ) : null}
-          </section>
+                </select>
+
+                <input
+                  placeholder="Evaluator (opt)"
+                  value={signoffForm.evaluator_name}
+                  onChange={(e) => setSignoffForm((f) => ({ ...f, evaluator_name: e.target.value }))}
+                  style={{ width: 140, ...selectStyle }}
+                />
+
+                <input
+                  placeholder="Notes (opt)"
+                  value={signoffForm.notes}
+                  onChange={(e) => setSignoffForm((f) => ({ ...f, notes: e.target.value }))}
+                  style={{ width: 120, ...selectStyle }}
+                />
+
+                <button
+                  type="submit"
+                  disabled={busySignoff || !signoffForm.member_id || !signoffForm.task_id}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 14px",
+                    borderRadius: 6,
+                    border: "1px solid #86efac",
+                    background: "#f0fdf4",
+                    color: "#15803d",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {busySignoff ? "Recording…" : "Record Skill"}
+                </button>
+              </form>
+
+              {signoffMsg && (
+                <p style={{ fontSize: 12, marginTop: 8, color: signoffMsg.startsWith("Skill recorded") ? "#15803d" : "#dc2626" }}>
+                  {signoffMsg}
+                </p>
+              )}
+            </section>
+          )}
         </>
-      ) : null}
+      )}
     </main>
   );
 }
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "8px 10px",
+  borderBottom: "1px solid #ddd",
+  fontSize: 12,
+  opacity: 0.85,
+  background: "#fafafa",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "6px 10px",
+  borderBottom: "1px solid #eee",
+  verticalAlign: "middle",
+};
+
+const timeInputStyle: React.CSSProperties = {
+  padding: "4px 6px",
+  borderRadius: 6,
+  border: "1px solid #ddd",
+  fontSize: 12,
+  width: "100%",
+};
+
+const selectStyle: React.CSSProperties = {
+  padding: "6px 8px",
+  borderRadius: 6,
+  border: "1px solid #ddd",
+  fontSize: 13,
+};

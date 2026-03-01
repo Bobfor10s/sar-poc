@@ -22,31 +22,29 @@ export async function POST(req: Request) {
   const check = await requirePermission("manage_calls");
   if (!check.ok) return check.response;
 
-  const body = await req.json();
+  const body = await req.json().catch(() => ({}));
 
-  // Backward-compat: if UI sends { title }, map it into summary
   const title = body.title ? String(body.title).trim() : "";
-  const type = body.type ? String(body.type).trim() : undefined;
+  if (!title) {
+    return NextResponse.json({ error: "title is required" }, { status: 400 });
+  }
 
-  const payload = {
-    // allow overrides, otherwise DB defaults handle start_dt/type/visibility
-    start_dt: body.start_dt ? String(body.start_dt) : undefined,
-    end_dt: body.end_dt ? String(body.end_dt) : null,
-    title: body.title ? String(body.title).trim() : null,
-
-    type: type || undefined,
-    location_text: body.location_text ? String(body.location_text).trim() : null,
-
-    // If your current UI uses "title", store it in summary
-    summary: body.summary
-      ? String(body.summary).trim()
-      : title
-      ? title
-      : null,
-
-    outcome: body.outcome ? String(body.outcome).trim() : null,
-    visibility: body.visibility ? String(body.visibility).trim() : undefined,
+  const payload: Record<string, unknown> = {
+    title,
+    status: "open",
+    visibility: "members",
   };
+
+  if (body.summary) payload.summary = String(body.summary).trim();
+  if (body.incident_lat != null && body.incident_lat !== "") {
+    payload.incident_lat = Number(body.incident_lat);
+  }
+  if (body.incident_lng != null && body.incident_lng !== "") {
+    payload.incident_lng = Number(body.incident_lng);
+  }
+  if (body.incident_radius_m != null && body.incident_radius_m !== "") {
+    payload.incident_radius_m = Number(body.incident_radius_m);
+  }
 
   const { data, error } = await supabaseDb
     .from("calls")

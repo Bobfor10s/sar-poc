@@ -17,6 +17,9 @@ type TrainingSession = {
   status?: string | null;
   visibility?: string | null;
   is_test?: boolean | null;
+  incident_lat?: number | null;
+  incident_lng?: number | null;
+  incident_radius_m?: number | null;
 };
 
 type AttendanceRow = {
@@ -33,7 +36,7 @@ type AttendanceRow = {
 type TaskMapRow = {
   id: string;
   training_session_id?: string | null;
-  position_id: string;
+  position_id?: string | null;
   task_id: string;
   evaluation_method?: string | null;
   positions?: { id: string; code: string; name: string } | null;
@@ -47,7 +50,7 @@ type TaskRow = { id: string; task_code: string; task_name: string; description?:
 type SignoffRow = {
   id: string;
   member_id: string;
-  position_id: string;
+  position_id?: string | null;
   task_id: string;
   evaluator_name?: string | null;
   signed_at: string;
@@ -116,6 +119,7 @@ export default function TrainingDetailPage() {
   const [sessionSignoffs, setSessionSignoffs] = useState<SignoffRow[]>([]);
   const [allMembers, setAllMembers] = useState<MemberRow[]>([]);
   const [allPositions, setAllPositions] = useState<PositionRow[]>([]);
+  const [allTasks, setAllTasks] = useState<TaskRow[]>([]);
 
   // ── Form state: session edit ──
   const [editSession, setEditSession] = useState<Partial<TrainingSession>>({});
@@ -124,11 +128,10 @@ export default function TrainingDetailPage() {
   const [attMemberId, setAttMemberId] = useState("");
 
   // ── Form state: task map ──
-  const [mapPositionId, setMapPositionId] = useState("");
   const [mapTaskId, setMapTaskId] = useState("");
-  const [mapPositionTasks, setMapPositionTasks] = useState<TaskRow[]>([]);
 
   // ── Form state: sign-offs ──
+  const [soScope, setSoScope] = useState<"member" | "all">("member");
   const [soMemberId, setSoMemberId] = useState("");
   const [soTaskMapId, setSoTaskMapId] = useState(""); // selected task map row id
   const [soEvaluator, setSoEvaluator] = useState("");
@@ -144,6 +147,30 @@ export default function TrainingDetailPage() {
   // ── UI state ──
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
+  const [gpsLoading, setGpsLoading] = useState(false);
+
+  function useMyLocation() {
+    if (!navigator.geolocation) {
+      setErr("GPS not available on this device.");
+      return;
+    }
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setEditSession((s) => ({
+          ...s,
+          incident_lat: parseFloat(pos.coords.latitude.toFixed(6)),
+          incident_lng: parseFloat(pos.coords.longitude.toFixed(6)),
+        }));
+        setGpsLoading(false);
+      },
+      () => {
+        setErr("Could not get location. Check browser permissions.");
+        setGpsLoading(false);
+      },
+      { timeout: 10000 }
+    );
+  }
 
   // ── Load all ──────────────────────────────────────────────────────────────
 
@@ -155,13 +182,14 @@ export default function TrainingDetailPage() {
     setBusy("reload");
     setErr("");
     try {
-      const [sessRes, attRes, mapRes, soRes, membersRes, posRes, groupsRes] = await Promise.all([
+      const [sessRes, attRes, mapRes, soRes, membersRes, posRes, tasksRes, groupsRes] = await Promise.all([
         fetch(`/api/training-sessions/${sessionId}`),
         fetch(`/api/training-attendance?training_session_id=${sessionId}`),
         fetch(`/api/training-task-map?training_session_id=${sessionId}`),
         fetch(`/api/member-task-signoffs?training_session_id=${sessionId}`),
         fetch(`/api/members`),
         fetch(`/api/positions`),
+        fetch(`/api/tasks`),
         fetch(`/api/search-groups?training_session_id=${sessionId}`),
       ]);
 
@@ -176,6 +204,7 @@ export default function TrainingDetailPage() {
       setSessionSignoffs(asArray<SignoffRow>(await soRes.json().catch(() => [])));
       setAllMembers(asArray<MemberRow>(await membersRes.json().catch(() => [])));
       setAllPositions(asArray<PositionRow>(await posRes.json().catch(() => [])));
+      setAllTasks((await tasksRes.json().catch(() => ({}))).data ?? []);
       setGroups(asArray<SearchGroup>(await groupsRes.json().catch(() => [])));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
@@ -186,21 +215,29 @@ export default function TrainingDetailPage() {
 
   useEffect(() => { loadAll(); }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When map position changes, load tasks for that position
-  useEffect(() => {
-    if (!mapPositionId || !isUuid(mapPositionId)) {
-      setMapPositionTasks([]);
-      setMapTaskId("");
-      return;
+
+  // ── Open / Close training ─────────────────────────────────────────────────
+
+  async function setTrainingStatus(newStatus: string) {
+    setBusy("status");
+    setErr("");
+    try {
+      const res = await fetch(`/api/training-sessions/${sessionId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Failed to update status");
+      const s = json?.data ?? null;
+      setSession(s);
+      setEditSession(s ?? {});
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    } finally {
+      setBusy("");
     }
-    fetch(`/api/positions/${mapPositionId}/requirements`)
-      .then((r) => r.json())
-      .then((j) => {
-        setMapPositionTasks(j?.data?.tasks ?? []);
-        setMapTaskId("");
-      })
-      .catch(() => setMapPositionTasks([]));
-  }, [mapPositionId]);
+  }
 
   // ── Session save ──────────────────────────────────────────────────────────
 
@@ -273,13 +310,13 @@ export default function TrainingDetailPage() {
   const mappedTaskIds = useMemo(() => new Set(taskMap.map((t) => t.task_id)), [taskMap]);
 
   async function addTaskToMap() {
-    if (!mapPositionId || !mapTaskId) return;
+    if (!mapTaskId) return;
     setBusy("map");
     try {
       const res = await fetch("/api/training-task-map", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ training_session_id: sessionId, position_id: mapPositionId, task_id: mapTaskId }),
+        body: JSON.stringify({ training_session_id: sessionId, task_id: mapTaskId }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Failed to add task");
@@ -329,7 +366,6 @@ export default function TrainingDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           member_id: soMemberId,
-          position_id: selectedTaskMapRow.position_id,
           task_id: selectedTaskMapRow.task_id,
           training_session_id: sessionId,
           evaluator_name: soEvaluator || null,
@@ -339,6 +375,39 @@ export default function TrainingDetailPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Sign-off failed");
       setSessionSignoffs((prev) => [json.data, ...prev]);
+      setSoTaskMapId("");
+      setSoNotes("");
+    } catch (e: any) {
+      alert(e?.message ?? String(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function signOffAll() {
+    if (!soTaskMapId || !selectedTaskMapRow) return;
+    const taskId = selectedTaskMapRow.task_id;
+    const targets = attendance.filter((a) => !alreadySigned(a.member_id, taskId));
+    if (targets.length === 0) { alert("All attendees are already signed off for this task."); return; }
+    setBusy("signoff-all");
+    try {
+      const results = await Promise.all(
+        targets.map((a) =>
+          fetch("/api/member-task-signoffs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              member_id: a.member_id,
+              task_id: taskId,
+              training_session_id: sessionId,
+              evaluator_name: soEvaluator || null,
+              notes: soNotes || null,
+            }),
+          }).then((r) => r.json().catch(() => ({})))
+        )
+      );
+      const newSignoffs = results.filter((r) => r.data).map((r) => r.data as SignoffRow);
+      if (newSignoffs.length > 0) setSessionSignoffs((prev) => [...newSignoffs, ...prev]);
       setSoTaskMapId("");
       setSoNotes("");
     } catch (e: any) {
@@ -460,8 +529,31 @@ export default function TrainingDetailPage() {
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 900 }}>
       <p><Link href="/training">← Back to Training</Link></p>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 4 }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
         <h1 style={{ margin: 0 }}>{session?.title ?? "Training Session"}</h1>
+
+        {session && (
+          session.status === "scheduled" ? (
+            <button
+              type="button"
+              onClick={() => setTrainingStatus("completed")}
+              disabled={busy !== ""}
+              style={{ padding: "7px 18px", borderRadius: 8, border: "1px solid #a5b4fc", background: "#f2f2ff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+            >
+              {busy === "status" ? "Closing…" : "Close Training"}
+            </button>
+          ) : session.status === "completed" ? (
+            <button
+              type="button"
+              onClick={() => setTrainingStatus("scheduled")}
+              disabled={busy !== ""}
+              style={{ padding: "7px 18px", borderRadius: 8, border: "1px solid #14532d", background: "#166534", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}
+            >
+              {busy === "status" ? "Opening…" : "Open Training"}
+            </button>
+          ) : null
+        )}
+
         <button type="button" onClick={loadAll} disabled={busy !== ""} style={{ marginLeft: "auto" }}>
           {busy === "reload" ? "Refreshing…" : "Refresh"}
         </button>
@@ -504,6 +596,35 @@ export default function TrainingDetailPage() {
             </select>
           </Field>
         </div>
+
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f0f0f0" }}>
+          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Geofence</div>
+          <div style={{ marginBottom: 8 }}>
+            <button
+              type="button"
+              onClick={useMyLocation}
+              disabled={gpsLoading || busy !== ""}
+              style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #ddd", fontSize: 13, cursor: "pointer" }}
+            >
+              {gpsLoading ? "Getting location…" : "📍 Use my location"}
+            </button>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Lat</div>
+              <input style={inputStyle} value={editSession.incident_lat ?? ""} onChange={(e) => setEditSession({ ...editSession, incident_lat: e.target.value === "" ? null : Number(e.target.value) })} placeholder="e.g. 41.12345" />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Lng</div>
+              <input style={inputStyle} value={editSession.incident_lng ?? ""} onChange={(e) => setEditSession({ ...editSession, incident_lng: e.target.value === "" ? null : Number(e.target.value) })} placeholder="e.g. -74.12345" />
+            </div>
+            <div>
+              <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Radius (m)</div>
+              <input style={inputStyle} type="number" min={50} value={editSession.incident_radius_m ?? ""} onChange={(e) => setEditSession({ ...editSession, incident_radius_m: e.target.value === "" ? null : Number(e.target.value) })} placeholder="500" />
+            </div>
+          </div>
+        </div>
+
         <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
           <button type="button" onClick={saveSession} disabled={busy !== ""}>
             {busy === "save" ? "Saving…" : "Save"}
@@ -543,7 +664,7 @@ export default function TrainingDetailPage() {
                     <span style={{ ...muted, marginLeft: 10 }}>{a.status}</span>
                     {memberSignoffs.length > 0 ? (
                       <span style={{ ...muted, marginLeft: 10 }}>
-                        {memberSignoffs.length} sign-off{memberSignoffs.length !== 1 ? "s" : ""}
+                        {memberSignoffs.length} skill use{memberSignoffs.length !== 1 ? "s" : ""} logged
                       </span>
                     ) : null}
                   </div>
@@ -697,27 +818,20 @@ export default function TrainingDetailPage() {
 
       {/* ── Task Map ── */}
       <section style={sectionStyle}>
-        <h2 style={h2}>Task Map <span style={muted}>— define which competency tasks are evaluated in this session</span></h2>
+        <h2 style={h2}>Skills Practiced <span style={muted}>— skills that can be logged for this session</span></h2>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <select value={mapPositionId} onChange={(e) => setMapPositionId(e.target.value)} style={inputStyle}>
-            <option value="">Select position…</option>
-            {allPositions.map((p) => (
-              <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-            ))}
-          </select>
-
-          <select value={mapTaskId} onChange={(e) => setMapTaskId(e.target.value)} style={inputStyle} disabled={!mapPositionId}>
-            <option value="">Select task…</option>
-            {mapPositionTasks
+          <select value={mapTaskId} onChange={(e) => setMapTaskId(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+            <option value="">Select skill…</option>
+            {allTasks
               .filter((t) => t.is_active !== false && !mappedTaskIds.has(t.id))
               .map((t) => (
                 <option key={t.id} value={t.id}>{t.task_code} — {t.task_name}</option>
               ))}
           </select>
 
-          <button type="button" onClick={addTaskToMap} disabled={!mapPositionId || !mapTaskId || busy !== ""}>
-            {busy === "map" ? "Adding…" : "Add Task"}
+          <button type="button" onClick={addTaskToMap} disabled={!mapTaskId || busy !== ""}>
+            {busy === "map" ? "Adding…" : "Add Skill"}
           </button>
         </div>
 
@@ -726,11 +840,8 @@ export default function TrainingDetailPage() {
             {taskMap.map((t) => (
               <li key={t.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <span style={{ fontSize: 12, padding: "1px 6px", border: "1px solid #ddd", borderRadius: 999, marginRight: 8 }}>
-                    {(t.positions as any)?.code ?? "?"}
-                  </span>
-                  <strong>{(t.tasks as any)?.task_code}</strong>
-                  <span style={muted}> — {(t.tasks as any)?.task_name}</span>
+                  <strong>{(t.tasks as { task_code?: string })?.task_code}</strong>
+                  <span style={muted}> — {(t.tasks as { task_name?: string })?.task_name}</span>
                 </div>
                 <button
                   type="button"
@@ -744,40 +855,70 @@ export default function TrainingDetailPage() {
             ))}
           </ul>
         ) : (
-          <p style={muted}>No tasks mapped yet. Add tasks above to enable competency sign-offs.</p>
+          <p style={muted}>No skills added yet. Add skills above to log member use.</p>
         )}
       </section>
 
-      {/* ── Competency Sign-offs ── */}
+      {/* ── Skill Use Log ── */}
       <section style={sectionStyle}>
-        <h2 style={h2}>Competency Sign-offs</h2>
+        <h2 style={h2}>Skill Use Log</h2>
+        <p style={{ ...muted, marginTop: 0, marginBottom: 10 }}>
+          Record which skills each member practiced this session. These entries feed into admin approval reviews for positions and tasks.
+        </p>
 
         {attendance.length === 0 || taskMap.length === 0 ? (
-          <p style={muted}>Add attendance and map tasks above to enable sign-offs.</p>
+          <p style={muted}>Add attendance and add skills above to enable use logging.</p>
         ) : (
           <>
+            {/* Scope toggle */}
+            <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+              {(["member", "all"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => { setSoScope(s); setSoMemberId(""); setSoTaskMapId(""); }}
+                  style={{
+                    padding: "5px 14px", borderRadius: 6, fontSize: 13, cursor: "pointer",
+                    fontWeight: soScope === s ? 700 : 400,
+                    background: soScope === s ? "#1e40af" : "#f8fafc",
+                    color: soScope === s ? "#fff" : "#374151",
+                    border: soScope === s ? "1px solid #1e40af" : "1px solid #d1d5db",
+                  }}
+                >
+                  {s === "member" ? "Specific member" : "All attendees"}
+                </button>
+              ))}
+            </div>
+
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
-              <div>
-                <div style={labelStyle}>Member</div>
-                <select value={soMemberId} onChange={(e) => { setSoMemberId(e.target.value); setSoTaskMapId(""); }} style={inputStyle}>
-                  <option value="">Select member…</option>
-                  {attendance.map((a) => {
-                    const m = a.members;
-                    const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
-                    return <option key={a.member_id} value={a.member_id}>{name}</option>;
-                  })}
-                </select>
-              </div>
+              {soScope === "member" && (
+                <div>
+                  <div style={labelStyle}>Member</div>
+                  <select value={soMemberId} onChange={(e) => { setSoMemberId(e.target.value); setSoTaskMapId(""); }} style={inputStyle}>
+                    <option value="">Select member…</option>
+                    {attendance.map((a) => {
+                      const m = a.members;
+                      const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
+                      return <option key={a.member_id} value={a.member_id}>{name}</option>;
+                    })}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <div style={labelStyle}>Task</div>
-                <select value={soTaskMapId} onChange={(e) => setSoTaskMapId(e.target.value)} style={inputStyle} disabled={!soMemberId}>
+                <select
+                  value={soTaskMapId}
+                  onChange={(e) => setSoTaskMapId(e.target.value)}
+                  style={inputStyle}
+                  disabled={soScope === "member" && !soMemberId}
+                >
                   <option value="">Select task…</option>
                   {taskMap.map((t) => {
-                    const signed = alreadySigned(soMemberId, t.task_id);
+                    const signed = soScope === "member" && alreadySigned(soMemberId, t.task_id);
                     return (
                       <option key={t.id} value={t.id} disabled={signed}>
-                        {(t.positions as any)?.code} · {(t.tasks as any)?.task_code} — {(t.tasks as any)?.task_name}
+                        {(t.tasks as { task_code?: string })?.task_code} — {(t.tasks as { task_name?: string })?.task_name}
                         {signed ? " ✓" : ""}
                       </option>
                     );
@@ -795,21 +936,32 @@ export default function TrainingDetailPage() {
                 <input style={inputStyle} value={soNotes} onChange={(e) => setSoNotes(e.target.value)} placeholder="Optional" />
               </div>
 
-              <button
-                type="button"
-                onClick={signOff}
-                disabled={!soMemberId || !soTaskMapId || busy !== ""}
-                style={{ alignSelf: "flex-end" }}
-              >
-                {busy === "signoff" ? "Signing…" : "Sign Off"}
-              </button>
+              {soScope === "member" ? (
+                <button
+                  type="button"
+                  onClick={signOff}
+                  disabled={!soMemberId || !soTaskMapId || busy !== ""}
+                  style={{ alignSelf: "flex-end" }}
+                >
+                  {busy === "signoff" ? "Logging…" : "Log Use"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={signOffAll}
+                  disabled={!soTaskMapId || busy !== ""}
+                  style={{ alignSelf: "flex-end" }}
+                >
+                  {busy === "signoff-all" ? "Logging…" : `Log Use for All (${attendance.length})`}
+                </button>
+              )}
             </div>
 
-            {/* Sign-off log */}
+            {/* Use log */}
             {sessionSignoffs.length > 0 ? (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, opacity: 0.7, marginBottom: 6 }}>
-                  Sign-offs recorded this session ({sessionSignoffs.length})
+                  Uses logged this session ({sessionSignoffs.length})
                 </div>
                 <ul style={{ paddingLeft: 0, listStyle: "none" }}>
                   {sessionSignoffs.map((s) => {
@@ -817,7 +969,7 @@ export default function TrainingDetailPage() {
                     const mName = m ? memberName(m) : s.member_id;
                     const tm = taskMap.find((t) => t.task_id === s.task_id);
                     const taskLabel = tm
-                      ? `${(tm.positions as any)?.code} · ${(tm.tasks as any)?.task_code} — ${(tm.tasks as any)?.task_name}`
+                      ? `${(tm.tasks as { task_code?: string })?.task_code} — ${(tm.tasks as { task_name?: string })?.task_name}`
                       : s.task_id;
                     return (
                       <li key={s.id} style={{ padding: "6px 0", borderBottom: "1px solid #f0f0f0", fontSize: 13 }}>
@@ -833,7 +985,7 @@ export default function TrainingDetailPage() {
                 </ul>
               </>
             ) : (
-              <p style={muted}>No sign-offs recorded for this session yet.</p>
+              <p style={muted}>No uses logged for this session yet.</p>
             )}
           </>
         )}

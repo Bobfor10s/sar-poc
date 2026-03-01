@@ -46,8 +46,8 @@ export async function POST(req: Request, ctx: any) {
   const body = await req.json().catch(() => ({}));
   const req_kind = String(body.req_kind ?? "").trim().toLowerCase();
 
-  if (!["course", "time"].includes(req_kind)) {
-    return NextResponse.json({ error: "req_kind must be 'course' or 'time'" }, { status: 400 });
+  if (!["course", "time", "test", "physical"].includes(req_kind)) {
+    return NextResponse.json({ error: "req_kind must be 'course', 'time', 'test', or 'physical'" }, { status: 400 });
   }
 
   const payload: Record<string, string | number | null> = {

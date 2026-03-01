@@ -23,7 +23,7 @@ export async function POST(req: Request) {
   const title = String(body.title ?? "").trim();
   if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     title,
     start_dt: body.start_dt ? String(body.start_dt) : undefined,
     end_dt: body.end_dt ? String(body.end_dt) : null,
@@ -31,6 +31,9 @@ export async function POST(req: Request) {
     description: body.description ? String(body.description).trim() : null,
     visibility: body.visibility ? String(body.visibility).trim() : "members",
     is_test: body.is_test != null ? !!body.is_test : undefined,
+    incident_lat: body.incident_lat != null && body.incident_lat !== "" ? Number(body.incident_lat) : null,
+    incident_lng: body.incident_lng != null && body.incident_lng !== "" ? Number(body.incident_lng) : null,
+    incident_radius_m: body.incident_radius_m != null && body.incident_radius_m !== "" ? Number(body.incident_radius_m) : null,
   };
 
   const { data, error } = await supabaseDb

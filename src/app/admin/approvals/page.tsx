@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type ReadyRow = {
-  id: string;
+  id: string | null;          // null = auto-detected (no prior member_positions row)
   member_id: string;
   position_id: string;
-  status: string;
-  created_at: string;
+  status: string | null;      // null = auto-detected
+  created_at: string | null;
   members?: { id: string; first_name: string; last_name: string } | null;
   positions?: { id: string; code: string; name: string } | null;
 };
@@ -39,16 +39,24 @@ export default function ApprovalsPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function approve(mpId: string) {
-    setBusy(mpId);
+  async function approve(row: ReadyRow) {
+    const key = row.id ?? `${row.member_id}:${row.position_id}`;
+    setBusy(key);
     try {
+      const body = row.id
+        ? { id: row.id, approve: true, status: "qualified" }
+        : { member_id: row.member_id, position_id: row.position_id, approve: true };
+
       const res = await fetch("/api/member-positions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: mpId, approve: true, status: "qualified" }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
-        setRows((prev) => prev.filter((r) => r.id !== mpId));
+        setRows((prev) => prev.filter((r) => {
+          const k = r.id ?? `${r.member_id}:${r.position_id}`;
+          return k !== key;
+        }));
       } else {
         const json = await res.json().catch(() => ({}));
         alert(json?.error ?? "Approve failed");
@@ -68,6 +76,9 @@ export default function ApprovalsPage() {
       </main>
     );
   }
+
+  const autoRows = rows.filter((r) => r.id === null);
+  const enrolledRows = rows.filter((r) => r.id !== null);
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 900 }}>
@@ -92,65 +103,120 @@ export default function ApprovalsPage() {
           No pending approvals — all qualified members are up to date.
         </div>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 20 }}>
-          <thead>
-            <tr>
-              <th style={th}>Member</th>
-              <th style={th}>Position</th>
-              <th style={th}>Current Status</th>
-              <th style={th}>Working Since</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const name = r.members
-                ? `${r.members.last_name}, ${r.members.first_name}`
-                : r.member_id;
-              return (
-                <tr key={r.id}>
-                  <td style={td}>
-                    <Link href={`/members/${r.member_id}`} style={{ fontWeight: 600, textDecoration: "none" }}>
-                      {name}
-                    </Link>
-                  </td>
-                  <td style={td}>
-                    <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999, marginRight: 6, background: "#f8fafc" }}>
-                      {r.positions?.code}
-                    </span>
-                    <span style={{ opacity: 0.8 }}>{r.positions?.name}</span>
-                  </td>
-                  <td style={td}>
-                    <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>
-                      {r.status}
-                    </span>
-                  </td>
-                  <td style={td}>
-                    {new Date(r.created_at).toLocaleDateString()}
-                  </td>
-                  <td style={td}>
-                    <button
-                      type="button"
-                      onClick={() => approve(r.id)}
-                      disabled={busy === r.id}
-                      style={{
-                        padding: "5px 14px",
-                        borderRadius: 6,
-                        border: "1px solid #4a90d9",
-                        background: "#e8f0fb",
-                        cursor: "pointer",
-                        fontWeight: 600,
-                        fontSize: 13,
-                      }}
-                    >
-                      {busy === r.id ? "Approving…" : "Approve"}
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <>
+          {/* Auto-detected: qualified but never enrolled */}
+          {autoRows.length > 0 && (
+            <section style={{ marginTop: 24 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px", color: "#15803d" }}>
+                Auto-detected — requirements met
+              </h2>
+              <p style={{ fontSize: 12, opacity: 0.65, margin: "0 0 12px" }}>
+                These members were never manually enrolled but have completed all requirements for the position.
+              </p>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Member</th>
+                    <th style={th}>Position</th>
+                    <th style={th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {autoRows.map((r) => {
+                    const key = `${r.member_id}:${r.position_id}`;
+                    const name = r.members ? `${r.members.last_name}, ${r.members.first_name}` : r.member_id;
+                    return (
+                      <tr key={key}>
+                        <td style={td}>
+                          <Link href={`/members/${r.member_id}`} style={{ fontWeight: 600, textDecoration: "none" }}>
+                            {name}
+                          </Link>
+                        </td>
+                        <td style={td}>
+                          <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999, marginRight: 6, background: "#f8fafc" }}>
+                            {r.positions?.code}
+                          </span>
+                          <span style={{ opacity: 0.8 }}>{r.positions?.name}</span>
+                        </td>
+                        <td style={td}>
+                          <button
+                            type="button"
+                            onClick={() => approve(r)}
+                            disabled={busy === key}
+                            style={approveBtn}
+                          >
+                            {busy === key ? "Approving…" : "Approve & Qualify"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {/* Enrolled and ready */}
+          {enrolledRows.length > 0 && (
+            <section style={{ marginTop: 24 }}>
+              {autoRows.length > 0 && (
+                <h2 style={{ fontSize: 14, fontWeight: 700, margin: "0 0 8px" }}>
+                  Enrolled — requirements met
+                </h2>
+              )}
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Member</th>
+                    <th style={th}>Position</th>
+                    <th style={th}>Current Status</th>
+                    <th style={th}>Working Since</th>
+                    <th style={th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {enrolledRows.map((r) => {
+                    const key = r.id!;
+                    const name = r.members ? `${r.members.last_name}, ${r.members.first_name}` : r.member_id;
+                    return (
+                      <tr key={key}>
+                        <td style={td}>
+                          <Link href={`/members/${r.member_id}`} style={{ fontWeight: 600, textDecoration: "none" }}>
+                            {name}
+                          </Link>
+                        </td>
+                        <td style={td}>
+                          <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999, marginRight: 6, background: "#f8fafc" }}>
+                            {r.positions?.code}
+                          </span>
+                          <span style={{ opacity: 0.8 }}>{r.positions?.name}</span>
+                        </td>
+                        <td style={td}>
+                          <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td style={td}>
+                          {r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}
+                        </td>
+                        <td style={td}>
+                          <button
+                            type="button"
+                            onClick={() => approve(r)}
+                            disabled={busy === key}
+                            style={approveBtn}
+                          >
+                            {busy === key ? "Approving…" : "Approve"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </section>
+          )}
+        </>
       )}
     </main>
   );
@@ -170,4 +236,14 @@ const td: React.CSSProperties = {
   borderBottom: "1px solid #eee",
   fontSize: 13,
   verticalAlign: "middle",
+};
+
+const approveBtn: React.CSSProperties = {
+  padding: "5px 14px",
+  borderRadius: 6,
+  border: "1px solid #4a90d9",
+  background: "#e8f0fb",
+  cursor: "pointer",
+  fontWeight: 600,
+  fontSize: 13,
 };

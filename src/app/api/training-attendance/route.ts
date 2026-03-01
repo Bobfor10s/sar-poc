@@ -42,12 +42,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "bad member_id" }, { status: 400 });
   }
 
+  const action = body.action ? String(body.action).trim() : null;
   const status = body.status ? String(body.status).trim() : "attended";
   const allowed = new Set(["attended", "absent", "excused"]);
   if (!allowed.has(status)) {
     return NextResponse.json({ error: "status must be attended|absent|excused" }, { status: 400 });
   }
 
+  const now = new Date().toISOString();
   const payload: any = {
     training_session_id,
     member_id,
@@ -56,11 +58,21 @@ export async function POST(req: Request) {
     notes: body.notes ? String(body.notes).trim() : null,
   };
 
+  if (action === "arrive") {
+    payload.time_in = now;
+    payload.time_out = null;
+  } else if (action === "clear") {
+    payload.time_out = now;
+  } else if (!action) {
+    // Legacy: no action field — just set time_in if not clearing
+    payload.time_in = now;
+  }
+
   // Upsert on unique (training_session_id, member_id)
   const { data, error } = await supabaseDb
     .from("training_attendance")
     .upsert(payload, { onConflict: "training_session_id,member_id" })
-    .select("id, training_session_id, member_id, status, hours, notes, created_at, members:member_id(first_name, last_name)")
+    .select("id, training_session_id, member_id, status, hours, notes, time_in, time_out, created_at, members:member_id(first_name, last_name)")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

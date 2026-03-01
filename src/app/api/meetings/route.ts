@@ -35,6 +35,9 @@ export async function POST(req: Request) {
     visibility: body.visibility ? String(body.visibility).trim() : "members",
     status: body.status ? String(body.status).trim() : "scheduled",
     is_test: !!body.is_test,
+    incident_lat: body.incident_lat != null && body.incident_lat !== "" ? Number(body.incident_lat) : null,
+    incident_lng: body.incident_lng != null && body.incident_lng !== "" ? Number(body.incident_lng) : null,
+    incident_radius_m: body.incident_radius_m != null && body.incident_radius_m !== "" ? Number(body.incident_radius_m) : null,
   };
 
   const { data, error } = await supabaseDb
