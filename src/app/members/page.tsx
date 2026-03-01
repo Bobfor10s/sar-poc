@@ -51,6 +51,7 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string>("");
   const [memberLocations, setMemberLocations] = useState<Record<string, { type: string; title: string }>>({});
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -117,6 +118,10 @@ export default function MembersPage() {
   useEffect(() => {
     load();
     loadOnSite();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setIsAdmin(json?.user?.role === "admin"))
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleSort(next: SortKey) {
@@ -251,7 +256,7 @@ export default function MembersPage() {
               <Th onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir}>
                 Name
               </Th>
-              <th style={th}>Role</th>
+              {isAdmin && <th style={th}>Role</th>}
               <Th onClick={() => toggleSort("onsite")} active={sortKey === "onsite"} dir={sortDir}>
                 Location
               </Th>
@@ -273,13 +278,13 @@ export default function MembersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={7} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={isAdmin ? 7 : 6} style={{ padding: 14, opacity: 0.75 }}>
                   Loading…
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={isAdmin ? 7 : 6} style={{ padding: 14, opacity: 0.75 }}>
                   No members found.
                 </td>
               </tr>
@@ -299,21 +304,23 @@ export default function MembersPage() {
                       </Link>
                     </td>
 
-                    <td style={td}>
-                      {m.role && m.role !== "member" && (
-                        <span style={{
-                          fontSize: 11,
-                          padding: "1px 7px",
-                          borderRadius: 999,
-                          fontWeight: 700,
-                          ...(m.role === "admin"
-                            ? { background: "#dbeafe", border: "1px solid #93c5fd", color: "#1e40af" }
-                            : { background: "#d1fae5", border: "1px solid #6ee7b7", color: "#065f46" }),
-                        }}>
-                          {m.role}
-                        </span>
-                      )}
-                    </td>
+                    {isAdmin && (
+                      <td style={td}>
+                        {m.role && m.role !== "member" && (
+                          <span style={{
+                            fontSize: 11,
+                            padding: "1px 7px",
+                            borderRadius: 999,
+                            fontWeight: 700,
+                            ...(m.role === "admin"
+                              ? { background: "#dbeafe", border: "1px solid #93c5fd", color: "#1e40af" }
+                              : { background: "#d1fae5", border: "1px solid #6ee7b7", color: "#065f46" }),
+                          }}>
+                            {m.role}
+                          </span>
+                        )}
+                      </td>
+                    )}
 
                     <td style={td}>
                       {memberLocations[m.id] && (
