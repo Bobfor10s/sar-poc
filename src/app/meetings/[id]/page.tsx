@@ -15,6 +15,21 @@ type Meeting = {
   created_at?: string | null;
 };
 
+function computeStatus(m: Meeting): "scheduled" | "open" | "closed" {
+  const now = new Date();
+  const start = m.start_dt ? new Date(m.start_dt) : null;
+  const end = m.end_dt ? new Date(m.end_dt) : null;
+  if (!start || now < start) return "scheduled";
+  if (!end || now < end) return "open";
+  return "closed";
+}
+
+const statusChip: Record<string, React.CSSProperties> = {
+  scheduled: { background: "#eff6ff", borderColor: "#3b82f6", color: "#1e40af" },
+  open:      { background: "#f0fdf4", borderColor: "#22c55e", color: "#15803d", fontWeight: 700 },
+  closed:    { background: "#f4f4f4", borderColor: "#d1d5db", color: "#6b7280" },
+};
+
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
@@ -93,15 +108,36 @@ export default function MeetingDetailPage() {
         location_text: meeting.location_text ?? null,
         agenda: meeting.agenda ?? null,
         notes: meeting.notes ?? null,
-        status: meeting.status ?? "scheduled",
         start_dt: localInputToIso(startLocal),
         end_dt: endLocal ? localInputToIso(endLocal) : null,
       }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) { setMsg(json?.error ?? "Save failed"); setBusy(false); return; }
-    setMeeting(json.data ?? null);
+    const m = json.data ?? null;
+    setMeeting(m);
+    setStartLocal(toLocalInputValue(m?.start_dt));
+    setEndLocal(toLocalInputValue(m?.end_dt));
     setMsg("Saved.");
+    setBusy(false);
+  }
+
+  async function patchNow(field: "start_dt" | "end_dt") {
+    if (!meeting) return;
+    setBusy(true);
+    setMsg("");
+    const now = new Date().toISOString();
+    const res = await fetch(`/api/meetings/${meeting.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: now }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) { setMsg(json?.error ?? "Failed"); setBusy(false); return; }
+    const m = json.data ?? null;
+    setMeeting(m);
+    setStartLocal(toLocalInputValue(m?.start_dt));
+    setEndLocal(toLocalInputValue(m?.end_dt));
     setBusy(false);
   }
 
@@ -115,10 +151,47 @@ export default function MeetingDetailPage() {
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
         <h1 style={{ margin: 0 }}>{meeting?.title ?? "Meeting"}</h1>
+        {meeting && (() => {
+          const st = computeStatus(meeting);
+          return (
+            <span style={{ fontSize: 13, padding: "3px 10px", border: "1px solid #ddd", borderRadius: 999, ...statusChip[st] }}>
+              {st.charAt(0).toUpperCase() + st.slice(1)}
+            </span>
+          );
+        })()}
         <button type="button" onClick={load} disabled={busy} style={{ marginLeft: "auto" }}>
           Refresh
         </button>
       </div>
+
+      {/* Quick-action buttons driven by current status */}
+      {meeting && (() => {
+        const st = computeStatus(meeting);
+        return (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {st === "scheduled" && (
+              <button
+                type="button"
+                onClick={() => patchNow("start_dt")}
+                disabled={busy}
+                style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid #22c55e", background: "#f0fdf4", color: "#15803d", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                Open Meeting
+              </button>
+            )}
+            {st === "open" && (
+              <button
+                type="button"
+                onClick={() => patchNow("end_dt")}
+                disabled={busy}
+                style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid #d1d5db", background: "#f4f4f4", color: "#374151", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                Close Meeting
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {msg && (
         <div style={{ marginTop: 10, padding: 10, border: "1px solid #eee", borderRadius: 8, background: "#fafafa" }}>{msg}</div>
@@ -133,15 +206,6 @@ export default function MeetingDetailPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Title">
                 <input style={inputStyle} value={meeting.title ?? ""} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} placeholder="Meeting title" />
-              </Field>
-
-              <Field label="Status">
-                <select style={inputStyle} value={(meeting.status ?? "scheduled").toLowerCase()} onChange={(e) => setMeeting({ ...meeting, status: e.target.value })}>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="archived">Archived</option>
-                </select>
               </Field>
 
               <Field label="Start">
