@@ -85,7 +85,9 @@ export default function NewMemberPage() {
 
         <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
           <input
-            placeholder="Email"
+            placeholder="Email (required)"
+            type="email"
+            required
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
           />

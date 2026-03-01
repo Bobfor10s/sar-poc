@@ -108,11 +108,17 @@ export async function POST(req: Request) {
   const first_name = String(body.first_name ?? "").trim();
   const last_name = String(body.last_name ?? "").trim();
 
+  const email = String(body.email ?? "").trim();
+
   if (!first_name || !last_name) {
     return NextResponse.json(
       { error: "first_name and last_name are required" },
       { status: 400 }
     );
+  }
+
+  if (!email) {
+    return NextResponse.json({ error: "email is required" }, { status: 400 });
   }
 
   const joined_at = typeof body.joined_at === "string" && body.joined_at.trim()
@@ -124,7 +130,7 @@ export async function POST(req: Request) {
     .insert({
       first_name,
       last_name,
-      email: body.email ?? null,
+      email,
       phone: body.phone ?? null,
       street_address: body.street_address ?? null,
       street_address_2: body.street_address_2 ?? null,

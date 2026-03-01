@@ -82,18 +82,23 @@ export async function PATCH(req: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Permission denied: requires 'edit_contact'" }, { status: 403 });
   }
 
-  const fields = [
-    "first_name",
-    "last_name",
-    "email",
+  // Members editing themselves can only update contact/address/emergency fields
+  // Admins with edit_contact can also update name, email, joined_at
+  const selfOnlyFields = [
     "phone",
     "street_address",
     "street_address_2",
     "city",
     "state",
     "postal_code",
-    "joined_at",
+    "emergency_contact_name",
+    "emergency_contact_phone",
+    "emergency_contact_relationship",
   ];
+  const adminFields = ["first_name", "last_name", "email", "joined_at"];
+  const fields = isSelf && !canEditContact
+    ? selfOnlyFields
+    : [...selfOnlyFields, ...adminFields];
 
   const patch: Record<string, any> = {};
   for (const f of fields) {

@@ -507,6 +507,9 @@ export default function PortalPage() {
         </section>
       )}
 
+      {/* My Profile */}
+      <ProfileSection />
+
       {/* Activity History */}
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 18, marginBottom: 12 }}>Activity History</h2>
@@ -545,6 +548,123 @@ export default function PortalPage() {
     </main>
   );
 }
+
+function ProfileSection() {
+  const [member, setMember] = useState<Record<string, string> | null>(null);
+  const [form, setForm] = useState<Record<string, string> | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then(async (me) => {
+        const id = me?.user?.id;
+        if (!id) return;
+        const res = await fetch(`/api/members/${id}`);
+        if (!res.ok) return;
+        const json = await res.json();
+        const m = json?.data ?? {};
+        setMember(m);
+        setForm({
+          phone: m.phone ?? "",
+          street_address: m.street_address ?? "",
+          street_address_2: m.street_address_2 ?? "",
+          city: m.city ?? "",
+          state: m.state ?? "",
+          postal_code: m.postal_code ?? "",
+          emergency_contact_name: m.emergency_contact_name ?? "",
+          emergency_contact_phone: m.emergency_contact_phone ?? "",
+          emergency_contact_relationship: m.emergency_contact_relationship ?? "",
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!member || !form) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/members/${member.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(json?.error ?? "Save failed"); return; }
+      setMember(json?.data ?? member);
+      setMsg("Saved.");
+      setOpen(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!member || !form) return null;
+
+  return (
+    <section style={{ marginTop: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: open ? 16 : 0 }}>
+        <h2 style={{ fontSize: 18, margin: 0 }}>My Profile</h2>
+        <button
+          type="button"
+          onClick={() => { setOpen((v) => !v); setMsg(""); }}
+          style={{ fontSize: 13, padding: "4px 12px", borderRadius: 6, border: "1px solid #ddd", background: "#f8fafc", cursor: "pointer" }}
+        >
+          {open ? "Cancel" : "Edit"}
+        </button>
+      </div>
+
+      {!open && (
+        <div style={{ fontSize: 13, color: "#374151", display: "grid", gap: 4, marginTop: 8 }}>
+          <div><strong>Email:</strong> {member.email ?? "—"}</div>
+          <div><strong>Phone:</strong> {member.phone ?? "—"}</div>
+          <div><strong>Address:</strong> {[member.street_address, member.street_address_2, member.city, member.state, member.postal_code].filter(Boolean).join(", ") || "—"}</div>
+          <div><strong>Emergency contact:</strong> {member.emergency_contact_name ?? "—"}{member.emergency_contact_phone ? ` · ${member.emergency_contact_phone}` : ""}{member.emergency_contact_relationship ? ` (${member.emergency_contact_relationship})` : ""}</div>
+        </div>
+      )}
+
+      {open && (
+        <form onSubmit={save} style={{ display: "grid", gap: 10, maxWidth: 480 }}>
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, color: "#64748b" }}>Email (contact admin to change)</div>
+            <input value={member.email ?? ""} disabled style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", background: "#f1f5f9", color: "#94a3b8", fontSize: 13 }} />
+          </div>
+          <input placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} style={inputStyle} />
+          <div style={{ fontWeight: 600, fontSize: 13 }}>Address</div>
+          <input placeholder="Street address" value={form.street_address} onChange={(e) => setForm({ ...form, street_address: e.target.value })} style={inputStyle} />
+          <input placeholder="Apt / Unit (optional)" value={form.street_address_2} onChange={(e) => setForm({ ...form, street_address_2: e.target.value })} style={inputStyle} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 0.5fr 0.7fr", gap: 8 }}>
+            <input placeholder="City" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} style={inputStyle} />
+            <input placeholder="State" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} style={inputStyle} />
+            <input placeholder="ZIP" value={form.postal_code} onChange={(e) => setForm({ ...form, postal_code: e.target.value })} style={inputStyle} />
+          </div>
+          <div style={{ fontWeight: 600, fontSize: 13, marginTop: 4 }}>Emergency Contact</div>
+          <input placeholder="Name" value={form.emergency_contact_name} onChange={(e) => setForm({ ...form, emergency_contact_name: e.target.value })} style={inputStyle} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <input placeholder="Phone" value={form.emergency_contact_phone} onChange={(e) => setForm({ ...form, emergency_contact_phone: e.target.value })} style={inputStyle} />
+            <input placeholder="Relationship" value={form.emergency_contact_relationship} onChange={(e) => setForm({ ...form, emergency_contact_relationship: e.target.value })} style={inputStyle} />
+          </div>
+          {msg && <div style={{ fontSize: 13, color: msg === "Saved." ? "#15803d" : "#b91c1c" }}>{msg}</div>}
+          <button type="submit" disabled={saving} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid #3b82f6", background: "#eff6ff", color: "#1e40af", fontWeight: 600, fontSize: 13, cursor: "pointer", alignSelf: "flex-start" }}>
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </form>
+      )}
+    </section>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "7px 10px",
+  borderRadius: 8,
+  border: "1px solid #ddd",
+  fontSize: 13,
+};
 
 const thStyle: React.CSSProperties = {
   textAlign: "left",
