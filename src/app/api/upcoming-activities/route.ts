@@ -6,30 +6,31 @@ export async function GET() {
   const check = await requireAuth();
   if (!check.ok) return check.response;
 
-  // Use today's date (UTC) so anything starting today or later is included,
-  // regardless of whether the exact start time has just passed.
-  const todayDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // Exclude anything whose end_dt has passed; fall back to start_dt for items with no end_dt
+  const nowIso = new Date().toISOString();
+  const todayDate = nowIso.slice(0, 10); // YYYY-MM-DD
+  const endFilter = `end_dt.gte.${nowIso},and(end_dt.is.null,start_dt.gte.${todayDate})`;
 
   const [{ data: training }, { data: meetings }, { data: events }] = await Promise.all([
     supabaseDb
       .from("training_sessions")
       .select("id, title, start_dt, location_text")
       .eq("status", "scheduled")
-      .gte("start_dt", todayDate)
+      .or(endFilter)
       .order("start_dt", { ascending: true })
       .limit(20),
     supabaseDb
       .from("meetings")
       .select("id, title, start_dt, location_text")
       .eq("status", "scheduled")
-      .gte("start_dt", todayDate)
+      .or(endFilter)
       .order("start_dt", { ascending: true })
       .limit(20),
     supabaseDb
       .from("events")
       .select("id, title, start_dt, location_text")
       .eq("status", "scheduled")
-      .gte("start_dt", todayDate)
+      .or(endFilter)
       .order("start_dt", { ascending: true })
       .limit(20),
   ]);
