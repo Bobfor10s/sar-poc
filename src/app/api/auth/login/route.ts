@@ -19,16 +19,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 401 });
   }
 
-  // Fetch member row to get role for routing cookie
+  // Fetch member row to get role and display name
   const { data: member } = await supabaseDb
     .from("members")
-    .select("role")
+    .select("role, first_name, last_name")
     .eq("user_id", data.user.id)
     .maybeSingle();
 
   const role = member?.role ?? "member";
+  const name = member ? `${member.first_name} ${member.last_name}`.trim() : null;
 
-  const response = NextResponse.json({ ok: true, role, user: data.user });
+  const response = NextResponse.json({ ok: true, role, name, user: data.user });
   response.cookies.set("sar-role", role, { httpOnly: true, sameSite: "lax", path: "/" });
   return response;
 }

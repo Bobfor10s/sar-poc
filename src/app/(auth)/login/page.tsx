@@ -33,6 +33,7 @@ function LoginForm() {
         return;
       }
 
+      if (json?.name) sessionStorage.setItem("sar-display-name", json.name);
       router.push(next);
       router.refresh();
     } finally {

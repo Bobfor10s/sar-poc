@@ -126,6 +126,10 @@ export default function PortalPage() {
   }
 
   useEffect(() => {
+    // Show stored name immediately while the API call resolves
+    const stored = sessionStorage.getItem("sar-display-name");
+    if (stored) setMemberName(stored);
+
     loadAll();
     pollRef.current = setInterval(loadAll, 30000);
     return () => {
