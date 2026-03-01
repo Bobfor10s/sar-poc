@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
-import { requirePermission } from "@/lib/supabase/require-permission";
+import { requireAuth, requirePermission } from "@/lib/supabase/require-permission";
 
 async function getIdFromCtx(ctx: any): Promise<string> {
   const p = ctx?.params;
@@ -50,7 +50,7 @@ export async function GET(_req: Request, ctx: any) {
  * Backward compatible with manual time_in/time_out passed in body.
  */
 export async function POST(req: Request, ctx: any) {
-  const check = await requirePermission("manage_calls");
+  const check = await requireAuth();
   if (!check.ok) return check.response;
 
   const call_id = await getIdFromCtx(ctx);
@@ -64,6 +64,12 @@ export async function POST(req: Request, ctx: any) {
 
   if (!member_id || !isUuid(member_id)) {
     return NextResponse.json({ error: `bad member id: ${member_id || "(missing)"}` }, { status: 400 });
+  }
+
+  // Members can only check themselves in; manage_calls required to check in others
+  const canManage = check.auth.permissions.includes("manage_calls");
+  if (!canManage && check.auth.member?.id !== member_id) {
+    return NextResponse.json({ error: "Permission denied: can only check in yourself" }, { status: 403 });
   }
 
   const action = body.action ? String(body.action).toLowerCase() : "";
