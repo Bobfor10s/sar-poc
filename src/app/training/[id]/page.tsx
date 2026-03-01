@@ -97,6 +97,14 @@ function fmtDt(v?: string | null) {
   return d.toLocaleString();
 }
 
+function toDatetimeLocal(v?: string | null): string {
+  if (!v) return "";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function memberName(m: MemberRow) {
   return `${m.first_name} ${m.last_name}`;
 }
@@ -245,10 +253,19 @@ export default function TrainingDetailPage() {
     setBusy("save");
     setErr("");
     try {
+      const payload = { ...editSession };
+      if (payload.start_dt) {
+        const d = new Date(payload.start_dt);
+        if (!isNaN(d.getTime())) payload.start_dt = d.toISOString();
+      }
+      if (payload.end_dt) {
+        const d = new Date(payload.end_dt);
+        if (!isNaN(d.getTime())) payload.end_dt = d.toISOString();
+      }
       const res = await fetch(`/api/training-sessions/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(editSession),
+        body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Save failed");
@@ -595,6 +612,22 @@ export default function TrainingDetailPage() {
               <option value="public">Public</option>
             </select>
           </Field>
+          <Field label="Start">
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={toDatetimeLocal(editSession.start_dt)}
+              onChange={(e) => setEditSession({ ...editSession, start_dt: e.target.value })}
+            />
+          </Field>
+          <Field label="End">
+            <input
+              type="datetime-local"
+              style={inputStyle}
+              value={toDatetimeLocal(editSession.end_dt)}
+              onChange={(e) => setEditSession({ ...editSession, end_dt: e.target.value || null })}
+            />
+          </Field>
         </div>
 
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #f0f0f0" }}>
@@ -629,7 +662,6 @@ export default function TrainingDetailPage() {
           <button type="button" onClick={saveSession} disabled={busy !== ""}>
             {busy === "save" ? "Saving…" : "Save"}
           </button>
-          {session?.start_dt ? <span style={muted}>Start: {fmtDt(session.start_dt)}</span> : null}
           {session?.is_test ? <span style={{ ...muted, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>TEST</span> : null}
         </div>
       </section>
