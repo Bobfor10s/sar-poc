@@ -83,12 +83,6 @@ type SignoffRow = {
   signed_at: string;
 };
 
-type GlobalTask = {
-  id: string;
-  task_code: string;
-  task_name: string;
-  is_active: boolean;
-};
 
 type PtbErr = {
   message: string;
@@ -149,7 +143,6 @@ export default function MemberDetailPage() {
   const [reqsByPosition, setReqsByPosition] = useState<Record<string, ReqRow[]>>({});
   const [tasksByPosition, setTasksByPosition] = useState<Record<string, TaskRow[]>>({});
   const [signoffsByPosition, setSignoffsByPosition] = useState<Record<string, SignoffRow[]>>({});
-  const [globalTasks, setGlobalTasks] = useState<GlobalTask[]>([]);
   const [extSkillForm, setExtSkillForm] = useState({ position_id: "", task_id: "", pending_reason: "", hours: "" });
   const [extSkillMsg, setExtSkillMsg] = useState("");
 
@@ -194,13 +187,12 @@ export default function MemberDetailPage() {
       return;
     }
 
-    const [mRes, cRes, hRes, pRes, mpRes, gtRes] = await Promise.all([
+    const [mRes, cRes, hRes, pRes, mpRes] = await Promise.all([
       fetch(`/api/members/${memberId}`),
       fetch(`/api/courses`),
       fetch(`/api/member-certifications?member_id=${memberId}&mode=history`),
       fetch(`/api/positions`),
       fetch(`/api/member-positions?member_id=${memberId}`),
-      fetch(`/api/tasks`),
     ]);
 
     const mJson = await mRes.json().catch(() => ({}));
@@ -210,14 +202,12 @@ export default function MemberDetailPage() {
     const hJson = await hRes.json().catch(() => ({}));
     const pJson = await pRes.json().catch(() => ({}));
     const mpJson = await mpRes.json().catch(() => ({}));
-    const gtJson = await gtRes.json().catch(() => ({}));
 
     setMember(mJson.data);
     setCourses(cJson.data ?? []);
     setHistory(hJson.data ?? []);
     setPositions(pJson.data ?? []);
     setMemberPositions(mpJson.data ?? []);
-    setGlobalTasks((gtJson.data ?? []).filter((t: GlobalTask) => t.is_active));
 
     // Auto-load requirements for all assigned positions so badges are correct on load
     for (const mp of (mpJson.data ?? [])) {
@@ -631,22 +621,8 @@ export default function MemberDetailPage() {
     }
   }
 
-  // Tasks available for the external skill form
-  const extSkillTasks: TaskRow[] = extSkillForm.position_id
-    ? (tasksByPosition[extSkillForm.position_id] ?? []).filter((t) => t.is_active)
-    : (() => {
-        const seen = new Set<string>();
-        const all: TaskRow[] = [];
-        for (const mp of memberPositions) {
-          for (const t of tasksByPosition[mp.position_id] ?? []) {
-            if (t.is_active && !seen.has(t.id)) { seen.add(t.id); all.push(t); }
-          }
-        }
-        for (const t of globalTasks) {
-          if (!seen.has(t.id)) { seen.add(t.id); all.push(t as TaskRow); }
-        }
-        return all.sort((a, b) => a.task_code.localeCompare(b.task_code));
-      })();
+  // Tasks available for the external skill form — scoped to selected position
+  const extSkillTasks: TaskRow[] = (tasksByPosition[extSkillForm.position_id] ?? []).filter((t) => t.is_active);
 
   if (!member && !msg) {
     return <main style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</main>;
@@ -861,6 +837,7 @@ export default function MemberDetailPage() {
               <form onSubmit={addExternalSkill} style={{ display: "grid", gap: 8, maxWidth: 520 }}>
                 <select
                   value={extSkillForm.position_id}
+                  required
                   onChange={(e) => {
                     const pid = e.target.value;
                     setExtSkillForm((f) => ({ ...f, position_id: pid, task_id: "" }));
@@ -868,7 +845,7 @@ export default function MemberDetailPage() {
                   }}
                   style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #cbd5e1" }}
                 >
-                  <option value="">All available tasks (no specific position)</option>
+                  <option value="">Select position…</option>
                   {memberPositions.map((mp) => (
                     <option key={mp.position_id} value={mp.position_id}>
                       {mp.positions?.code ?? mp.position_id} — {mp.positions?.name ?? ""}
@@ -909,7 +886,7 @@ export default function MemberDetailPage() {
                   />
                   <button
                     type="submit"
-                    disabled={busy || !extSkillForm.task_id || !extSkillForm.pending_reason.trim()}
+                    disabled={busy || !extSkillForm.position_id || !extSkillForm.task_id || !extSkillForm.pending_reason.trim()}
                     style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #6366f1", background: "#eef2ff", cursor: "pointer", fontWeight: 600, fontSize: 13 }}
                   >
                     Submit for Approval
