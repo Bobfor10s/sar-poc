@@ -181,7 +181,7 @@ export default function EventDetailPage() {
       </div>
 
       {/* Quick-action buttons */}
-      {event && (() => {
+      {canEdit && event && (() => {
         const st = computeStatus(event);
         return (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>

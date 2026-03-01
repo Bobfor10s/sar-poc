@@ -187,7 +187,7 @@ export default function MeetingDetailPage() {
       </div>
 
       {/* Quick-action buttons driven by current status */}
-      {meeting && (() => {
+      {canEdit && meeting && (() => {
         const st = computeStatus(meeting);
         return (
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
