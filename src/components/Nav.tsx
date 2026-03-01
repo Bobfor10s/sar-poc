@@ -37,7 +37,6 @@ export default function Nav() {
   const perms = new Set(user?.permissions ?? []);
 
   const generalLinks = [
-    { href: "/portal", label: "My Status", always: true },
     { href: "/members", label: "Members", always: true },
     { href: "/calls", label: "Calls", perm: "read_all" },
     { href: "/training", label: "Training", perm: "read_all" },
@@ -112,6 +111,7 @@ export default function Nav() {
 
       {/* General links */}
       <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {navLink("/portal", "My Status")}
         {visibleGeneral.map((l) => navLink(l.href, l.label))}
       </div>
 
