@@ -251,6 +251,7 @@ export default function MembersPage() {
               <Th onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir}>
                 Name
               </Th>
+              <th style={th}>Role</th>
               <Th onClick={() => toggleSort("onsite")} active={sortKey === "onsite"} dir={sortDir}>
                 Location
               </Th>
@@ -272,13 +273,13 @@ export default function MembersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={6} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={7} style={{ padding: 14, opacity: 0.75 }}>
                   Loading…
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={7} style={{ padding: 14, opacity: 0.75 }}>
                   No members found.
                 </td>
               </tr>
@@ -296,9 +297,11 @@ export default function MembersPage() {
                       <Link href={`/members/${m.id}`} style={{ textDecoration: "none" }}>
                         <strong>{name || m.id}</strong>
                       </Link>
+                    </td>
+
+                    <td style={td}>
                       {m.role && m.role !== "member" && (
                         <span style={{
-                          marginLeft: 8,
                           fontSize: 11,
                           padding: "1px 7px",
                           borderRadius: 999,
