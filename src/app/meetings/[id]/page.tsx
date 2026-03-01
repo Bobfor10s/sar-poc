@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+type AttendanceRow = {
+  id: string;
+  member_id: string;
+  time_in: string | null;
+  time_out: string | null;
+  members: { first_name: string; last_name: string } | null;
+};
+
 type Meeting = {
   id: string;
   title: string;
@@ -75,6 +83,7 @@ export default function MeetingDetailPage() {
   const [msg, setMsg] = useState("");
   const [startLocal, setStartLocal] = useState("");
   const [endLocal, setEndLocal] = useState("");
+  const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
 
   async function load() {
     if (!meetingId || !isUuid(meetingId)) {
@@ -91,6 +100,10 @@ export default function MeetingDetailPage() {
     setMeeting(m);
     setStartLocal(toLocalInputValue(m?.start_dt));
     setEndLocal(toLocalInputValue(m?.end_dt));
+
+    const attRes = await fetch(`/api/meetings/${meetingId}/attendance`);
+    if (attRes.ok) setAttendance(await attRes.json().catch(() => []));
+
     setLoading(false);
   }
 
@@ -138,6 +151,8 @@ export default function MeetingDetailPage() {
     setMeeting(m);
     setStartLocal(toLocalInputValue(m?.start_dt));
     setEndLocal(toLocalInputValue(m?.end_dt));
+    const attRes = await fetch(`/api/meetings/${meeting.id}/attendance`);
+    if (attRes.ok) setAttendance(await attRes.json().catch(() => []));
     setBusy(false);
   }
 
@@ -246,6 +261,38 @@ export default function MeetingDetailPage() {
             </div>
           </section>
 
+          {/* Attendance list */}
+          <section style={{ ...sectionStyle, marginTop: 16 }}>
+            <h2 style={h2}>Attendance ({attendance.length})</h2>
+            {attendance.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 13, opacity: 0.65 }}>No check-ins yet.</p>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Member</th>
+                    <th style={thStyle}>Time In</th>
+                    <th style={thStyle}>Time Out</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.map((a) => {
+                    const name = a.members
+                      ? `${a.members.last_name}, ${a.members.first_name}`
+                      : a.member_id;
+                    return (
+                      <tr key={a.id}>
+                        <td style={tdStyle}>{name}</td>
+                        <td style={tdStyle}>{a.time_in ? new Date(a.time_in).toLocaleTimeString() : "—"}</td>
+                        <td style={tdStyle}>{a.time_out ? new Date(a.time_out).toLocaleTimeString() : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </section>
+
           <div style={{ fontSize: 12, opacity: 0.6, marginTop: 12 }}>
             <div><strong>ID:</strong> {meeting.id}</div>
             {meeting.created_at ? <div><strong>Created:</strong> {new Date(meeting.created_at).toLocaleString()}</div> : null}
@@ -283,4 +330,19 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #ddd",
   fontSize: 13,
   width: "100%",
+};
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "7px 10px",
+  borderBottom: "1px solid #ddd",
+  fontSize: 12,
+  opacity: 0.8,
+  background: "#fafafa",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "7px 10px",
+  borderBottom: "1px solid #eee",
+  verticalAlign: "middle",
 };

@@ -15,6 +15,25 @@ async function getIdFromCtx(ctx: any): Promise<string> {
   return "";
 }
 
+export async function GET(_req: Request, ctx: any) {
+  const check = await requireAuth();
+  if (!check.ok) return check.response;
+
+  const meeting_id = await getIdFromCtx(ctx);
+  if (!meeting_id || !isUuid(meeting_id)) {
+    return NextResponse.json({ error: `bad meeting id: ${meeting_id || "(missing)"}` }, { status: 400 });
+  }
+
+  const { data, error } = await supabaseDb
+    .from("meeting_attendance")
+    .select("id, member_id, time_in, time_out, members:member_id(first_name, last_name)")
+    .eq("meeting_id", meeting_id)
+    .order("time_in", { ascending: true });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
+}
+
 export async function POST(req: Request, ctx: any) {
   const check = await requireAuth();
   if (!check.ok) return check.response;
