@@ -8,52 +8,49 @@ export async function GET() {
   const { auth } = check;
 
   const now = new Date();
-  const todayDate = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const nowIso = now.toISOString();
+
+  // Active = started (start_dt <= now) and not yet ended (end_dt > now or no end_dt)
+  function isActive(row: { start_dt?: string | null; end_dt?: string | null }) {
+    if (!row.start_dt) return false;
+    if (new Date(row.start_dt) > now) return false; // not started yet
+    if (row.end_dt && new Date(row.end_dt) <= now) return false; // already ended
+    return true;
+  }
 
   // Fetch active calls: status = 'open' AND start_dt <= now
   const { data: calls } = await supabaseDb
     .from("calls")
     .select("id, title, incident_lat, incident_lng, incident_radius_m, start_dt")
     .eq("status", "open")
-    .lte("start_dt", now.toISOString());
+    .lte("start_dt", nowIso);
 
-  // Fetch active training sessions: status = 'scheduled' AND date(start_dt) <= today AND (end_dt IS NULL OR date(end_dt) >= today)
+  // Fetch training sessions that may be active (filter precisely with isActive)
   const { data: trainingSessions } = await supabaseDb
     .from("training_sessions")
     .select("id, title, incident_lat, incident_lng, incident_radius_m, start_dt, end_dt")
     .eq("status", "scheduled")
-    .lte("start_dt", `${todayDate}T23:59:59.999Z`);
+    .lte("start_dt", nowIso);
 
-  // Fetch active meetings: started but not cancelled/archived (end_dt checked by isActiveToday)
+  // Fetch meetings that may be active
   const { data: meetings } = await supabaseDb
     .from("meetings")
     .select("id, title, incident_lat, incident_lng, incident_radius_m, start_dt, end_dt")
     .neq("status", "cancelled")
     .neq("status", "archived")
-    .lte("start_dt", `${todayDate}T23:59:59.999Z`);
+    .lte("start_dt", nowIso);
 
-  // Fetch active events
+  // Fetch events that may be active
   const { data: events } = await supabaseDb
     .from("events")
     .select("id, title, incident_lat, incident_lng, incident_radius_m, start_dt, end_dt")
     .eq("status", "scheduled")
-    .lte("start_dt", `${todayDate}T23:59:59.999Z`);
-
-  // Active today: if end_dt set, today must be within start→end range.
-  // If no end_dt, only active on its start date (prevents old unfinished sessions showing forever).
-  function isActiveToday(row: { start_dt?: string | null; end_dt?: string | null }) {
-    const startDate = row.start_dt?.slice(0, 10);
-    if (!startDate) return false;
-    if (row.end_dt) {
-      return startDate <= todayDate && row.end_dt.slice(0, 10) >= todayDate;
-    }
-    return startDate === todayDate;
-  }
+    .lte("start_dt", nowIso);
 
   const activeCalls = (calls ?? []).map((c) => ({ type: "call" as const, ...c }));
-  const activeTraining = (trainingSessions ?? []).filter(isActiveToday).map((t) => ({ type: "training" as const, ...t }));
-  const activeMeetings = (meetings ?? []).filter(isActiveToday).map((m) => ({ type: "meeting" as const, ...m }));
-  const activeEvents = (events ?? []).filter(isActiveToday).map((e) => ({ type: "event" as const, ...e }));
+  const activeTraining = (trainingSessions ?? []).filter(isActive).map((t) => ({ type: "training" as const, ...t }));
+  const activeMeetings = (meetings ?? []).filter(isActive).map((m) => ({ type: "meeting" as const, ...m }));
+  const activeEvents = (events ?? []).filter(isActive).map((e) => ({ type: "event" as const, ...e }));
 
   const allActive = [...activeCalls, ...activeTraining, ...activeMeetings, ...activeEvents];
 
