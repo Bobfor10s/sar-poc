@@ -20,6 +20,7 @@ type MemberRow = {
 
   status?: string | null;
   joined_at?: string | null;
+  role?: string | null;
 
   // from members_with_sar view (if you’re using it)
   sar_codes?: string | null;
@@ -295,6 +296,20 @@ export default function MembersPage() {
                       <Link href={`/members/${m.id}`} style={{ textDecoration: "none" }}>
                         <strong>{name || m.id}</strong>
                       </Link>
+                      {m.role && m.role !== "member" && (
+                        <span style={{
+                          marginLeft: 8,
+                          fontSize: 11,
+                          padding: "1px 7px",
+                          borderRadius: 999,
+                          fontWeight: 700,
+                          ...(m.role === "admin"
+                            ? { background: "#dbeafe", border: "1px solid #93c5fd", color: "#1e40af" }
+                            : { background: "#d1fae5", border: "1px solid #6ee7b7", color: "#065f46" }),
+                        }}>
+                          {m.role}
+                        </span>
+                      )}
                     </td>
 
                     <td style={td}>
