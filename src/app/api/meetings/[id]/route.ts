@@ -88,6 +88,17 @@ export async function PATCH(req: Request, ctx: any) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // When end_dt is set, auto-checkout any members still checked in (time_in set, time_out null)
+  if (payload.end_dt) {
+    await supabaseDb
+      .from("meeting_attendance")
+      .update({ time_out: payload.end_dt })
+      .eq("meeting_id", id)
+      .not("time_in", "is", null)
+      .is("time_out", null);
+  }
+
   return NextResponse.json({ data });
 }
 
