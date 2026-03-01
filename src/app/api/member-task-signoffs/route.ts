@@ -211,6 +211,20 @@ export async function GET(req: Request) {
   const position_id = (url.searchParams.get("position_id") || "").trim();
   const training_session_id = (url.searchParams.get("training_session_id") || "").trim();
   const call_id = (url.searchParams.get("call_id") || "").trim();
+  const status_filter = (url.searchParams.get("status") || "").trim();
+
+  // Mode 0: pending signoffs (admin only)
+  if (status_filter === "pending") {
+    const permCheck = await requirePermission("approve_positions");
+    if (!permCheck.ok) return permCheck.response;
+    const { data, error } = await supabaseDb
+      .from("member_task_signoffs")
+      .select("id, member_id, position_id, task_id, evaluator_name, signed_at, notes, hours, pending_reason, status, members:member_id(first_name, last_name), position_tasks:task_id(task_code, task_name), positions:position_id(code, name)")
+      .eq("status", "pending")
+      .order("signed_at", { ascending: false });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ data: data ?? [] });
+  }
 
   // Mode 1: by training_session_id — return all signoffs for a session
   if (training_session_id) {
@@ -283,32 +297,36 @@ export async function POST(req: Request) {
   if (position_id && !isUuid(position_id)) return NextResponse.json({ error: "bad position_id" }, { status: 400 });
   if (!task_id || !isUuid(task_id)) return NextResponse.json({ error: "bad task_id" }, { status: 400 });
 
-  // If this is PTB Complete, enforce requirements first
-  const { data: taskRow, error: taskErr } = await supabaseDb
-    .from("position_tasks")
-    .select("id, task_code, position_id")
-    .eq("id", task_id)
-    .single();
+  const isPending = body.pending === true;
 
-  if (taskErr) return NextResponse.json({ error: taskErr.message }, { status: 500 });
+  // If this is PTB Complete (and not a pending external skill), enforce requirements first
+  if (!isPending) {
+    const { data: taskRow, error: taskErr } = await supabaseDb
+      .from("position_tasks")
+      .select("id, task_code, position_id")
+      .eq("id", task_id)
+      .single();
 
-  const task_code = String((taskRow as { task_code?: string })?.task_code ?? "");
-  if (isPtbCompleteTaskCode(task_code) && position_id) {
-    try {
-      const reqCheck = await checkPositionRequirements(member_id, position_id);
+    if (taskErr) return NextResponse.json({ error: taskErr.message }, { status: 500 });
 
-      if (!reqCheck.ok) {
-        return NextResponse.json(
-          {
-            error: "PTB cannot be marked complete until requirements are met.",
-            missing_courses: reqCheck.missing_courses,
-            missing_positions: reqCheck.missing_positions,
-          },
-          { status: 400 }
-        );
+    const task_code = String((taskRow as { task_code?: string })?.task_code ?? "");
+    if (isPtbCompleteTaskCode(task_code) && position_id) {
+      try {
+        const reqCheck = await checkPositionRequirements(member_id, position_id);
+
+        if (!reqCheck.ok) {
+          return NextResponse.json(
+            {
+              error: "PTB cannot be marked complete until requirements are met.",
+              missing_courses: reqCheck.missing_courses,
+              missing_positions: reqCheck.missing_positions,
+            },
+            { status: 400 }
+          );
+        }
+      } catch (e: unknown) {
+        return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
       }
-    } catch (e: unknown) {
-      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
     }
   }
 
@@ -328,6 +346,8 @@ export async function POST(req: Request) {
     hours: body.hours != null && body.hours !== "" ? Number(body.hours) : null,
     call_id,
     training_session_id,
+    status: isPending ? "pending" : "approved",
+    pending_reason: isPending && body.pending_reason ? String(body.pending_reason).trim() : null,
   };
 
   const { data: inserted, error: insErr } = await supabaseDb

@@ -13,11 +13,28 @@ type ReadyRow = {
   positions?: { id: string; code: string; name: string } | null;
 };
 
+type PendingSignoff = {
+  id: string;
+  member_id: string;
+  position_id: string | null;
+  task_id: string;
+  signed_at: string;
+  pending_reason: string | null;
+  notes: string | null;
+  hours: number | null;
+  members?: { first_name: string; last_name: string } | null;
+  position_tasks?: { task_code: string; task_name: string } | null;
+  positions?: { code: string; name: string } | null;
+};
+
 export default function ApprovalsPage() {
   const [authPerms, setAuthPerms] = useState<string[] | null>(null);
   const [rows, setRows] = useState<ReadyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
+  const [pendingSignoffs, setPendingSignoffs] = useState<PendingSignoff[]>([]);
+  const [loadingSignoffs, setLoadingSignoffs] = useState(true);
+  const [busySignoff, setBusySignoff] = useState("");
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -37,7 +54,18 @@ export default function ApprovalsPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadPendingSignoffs() {
+    setLoadingSignoffs(true);
+    try {
+      const res = await fetch("/api/member-task-signoffs?status=pending");
+      const json = await res.json().catch(() => ({}));
+      setPendingSignoffs(json.data ?? []);
+    } finally {
+      setLoadingSignoffs(false);
+    }
+  }
+
+  useEffect(() => { load(); loadPendingSignoffs(); }, []);
 
   async function approve(row: ReadyRow) {
     const key = row.id ?? `${row.member_id}:${row.position_id}`;
@@ -66,6 +94,25 @@ export default function ApprovalsPage() {
     }
   }
 
+  async function approveSignoff(signoff: PendingSignoff) {
+    setBusySignoff(signoff.id);
+    try {
+      const res = await fetch(`/api/member-task-signoffs/${signoff.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approve: true }),
+      });
+      if (res.ok) {
+        setPendingSignoffs((prev) => prev.filter((s) => s.id !== signoff.id));
+      } else {
+        const json = await res.json().catch(() => ({}));
+        alert(json?.error ?? "Approve failed");
+      }
+    } finally {
+      setBusySignoff("");
+    }
+  }
+
   if (authPerms !== null && !authPerms.includes("approve_positions")) {
     return (
       <main style={{ padding: 24, fontFamily: "system-ui" }}>
@@ -91,8 +138,8 @@ export default function ApprovalsPage() {
             Members who have met all requirements for a position and are ready to be approved.
           </p>
         </div>
-        <button type="button" onClick={load} disabled={loading}>
-          {loading ? "Loading…" : "Refresh"}
+        <button type="button" onClick={() => { load(); loadPendingSignoffs(); }} disabled={loading || loadingSignoffs}>
+          {loading || loadingSignoffs ? "Loading…" : "Refresh"}
         </button>
       </div>
 
@@ -218,6 +265,79 @@ export default function ApprovalsPage() {
           )}
         </>
       )}
+
+      {/* Pending Skill Reviews */}
+      <section style={{ marginTop: 40 }}>
+        <h2 style={{ margin: "0 0 4px", fontSize: 18 }}>Pending Skill Reviews</h2>
+        <p style={{ margin: "0 0 14px", fontSize: 13, opacity: 0.65 }}>
+          Skills submitted by admins on behalf of members for external or prior experience — awaiting approval.
+        </p>
+
+        {loadingSignoffs ? (
+          <p style={{ opacity: 0.65 }}>Loading…</p>
+        ) : pendingSignoffs.length === 0 ? (
+          <div style={{ padding: 16, border: "1px solid #e5e5e5", borderRadius: 10, textAlign: "center", opacity: 0.65 }}>
+            No pending skill reviews.
+          </div>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                <th style={th}>Member</th>
+                <th style={th}>Task</th>
+                <th style={th}>Position</th>
+                <th style={th}>Reason / Notes</th>
+                <th style={th}>Submitted</th>
+                <th style={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingSignoffs.map((s) => {
+                const name = s.members
+                  ? `${s.members.last_name}, ${s.members.first_name}`
+                  : s.member_id;
+                const taskLabel = s.position_tasks
+                  ? `${s.position_tasks.task_code} — ${s.position_tasks.task_name}`
+                  : s.task_id;
+                return (
+                  <tr key={s.id}>
+                    <td style={td}>
+                      <Link href={`/members/${s.member_id}`} style={{ fontWeight: 600, textDecoration: "none" }}>
+                        {name}
+                      </Link>
+                    </td>
+                    <td style={td}>{taskLabel}</td>
+                    <td style={td}>
+                      {s.positions ? (
+                        <span style={{ fontSize: 12, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999, background: "#f8fafc" }}>
+                          {s.positions.code}
+                        </span>
+                      ) : (
+                        <span style={{ opacity: 0.45 }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ ...td, maxWidth: 260, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                      {s.pending_reason || s.notes || <span style={{ opacity: 0.45 }}>—</span>}
+                      {s.hours ? <span style={{ marginLeft: 6, opacity: 0.65, fontSize: 12 }}>· {s.hours}h</span> : null}
+                    </td>
+                    <td style={td}>{new Date(s.signed_at).toLocaleDateString()}</td>
+                    <td style={td}>
+                      <button
+                        type="button"
+                        onClick={() => approveSignoff(s)}
+                        disabled={busySignoff === s.id}
+                        style={approveBtn}
+                      >
+                        {busySignoff === s.id ? "Approving…" : "Approve"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
     </main>
   );
 }

@@ -83,6 +83,13 @@ type SignoffRow = {
   signed_at: string;
 };
 
+type GlobalTask = {
+  id: string;
+  task_code: string;
+  task_name: string;
+  is_active: boolean;
+};
+
 type PtbErr = {
   message: string;
   missing_courses: string[];
@@ -142,6 +149,9 @@ export default function MemberDetailPage() {
   const [reqsByPosition, setReqsByPosition] = useState<Record<string, ReqRow[]>>({});
   const [tasksByPosition, setTasksByPosition] = useState<Record<string, TaskRow[]>>({});
   const [signoffsByPosition, setSignoffsByPosition] = useState<Record<string, SignoffRow[]>>({});
+  const [globalTasks, setGlobalTasks] = useState<GlobalTask[]>([]);
+  const [extSkillForm, setExtSkillForm] = useState({ position_id: "", task_id: "", pending_reason: "", hours: "" });
+  const [extSkillMsg, setExtSkillMsg] = useState("");
 
   const completedCourseCodes = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
@@ -184,12 +194,13 @@ export default function MemberDetailPage() {
       return;
     }
 
-    const [mRes, cRes, hRes, pRes, mpRes] = await Promise.all([
+    const [mRes, cRes, hRes, pRes, mpRes, gtRes] = await Promise.all([
       fetch(`/api/members/${memberId}`),
       fetch(`/api/courses`),
       fetch(`/api/member-certifications?member_id=${memberId}&mode=history`),
       fetch(`/api/positions`),
       fetch(`/api/member-positions?member_id=${memberId}`),
+      fetch(`/api/tasks`),
     ]);
 
     const mJson = await mRes.json().catch(() => ({}));
@@ -199,12 +210,14 @@ export default function MemberDetailPage() {
     const hJson = await hRes.json().catch(() => ({}));
     const pJson = await pRes.json().catch(() => ({}));
     const mpJson = await mpRes.json().catch(() => ({}));
+    const gtJson = await gtRes.json().catch(() => ({}));
 
     setMember(mJson.data);
     setCourses(cJson.data ?? []);
     setHistory(hJson.data ?? []);
     setPositions(pJson.data ?? []);
     setMemberPositions(mpJson.data ?? []);
+    setGlobalTasks((gtJson.data ?? []).filter((t: GlobalTask) => t.is_active));
 
     // Auto-load requirements for all assigned positions so badges are correct on load
     for (const mp of (mpJson.data ?? [])) {
@@ -582,6 +595,59 @@ export default function MemberDetailPage() {
     }
   }
 
+  async function addExternalSkill(e: React.FormEvent) {
+    e.preventDefault();
+    if (!member || !extSkillForm.task_id || !extSkillForm.pending_reason.trim()) return;
+
+    setBusy(true);
+    setExtSkillMsg("");
+
+    try {
+      const res = await fetch("/api/member-task-signoffs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          member_id: member.id,
+          position_id: extSkillForm.position_id || null,
+          task_id: extSkillForm.task_id,
+          pending: true,
+          pending_reason: extSkillForm.pending_reason.trim(),
+          hours: extSkillForm.hours ? Number(extSkillForm.hours) : null,
+          evaluator_name: "External",
+          evaluator_position: "Prior to membership",
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setExtSkillMsg(json?.error ?? "Submission failed");
+        return;
+      }
+
+      setExtSkillForm({ position_id: "", task_id: "", pending_reason: "", hours: "" });
+      setExtSkillMsg("Skill submitted for approval. Review it on the Approvals page.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Tasks available for the external skill form
+  const extSkillTasks: TaskRow[] = extSkillForm.position_id
+    ? (tasksByPosition[extSkillForm.position_id] ?? []).filter((t) => t.is_active)
+    : (() => {
+        const seen = new Set<string>();
+        const all: TaskRow[] = [];
+        for (const mp of memberPositions) {
+          for (const t of tasksByPosition[mp.position_id] ?? []) {
+            if (t.is_active && !seen.has(t.id)) { seen.add(t.id); all.push(t); }
+          }
+        }
+        for (const t of globalTasks) {
+          if (!seen.has(t.id)) { seen.add(t.id); all.push(t as TaskRow); }
+        }
+        return all.sort((a, b) => a.task_code.localeCompare(b.task_code));
+      })();
+
   if (!member && !msg) {
     return <main style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</main>;
   }
@@ -784,6 +850,80 @@ export default function MemberDetailPage() {
               Assign (trainee)
             </button>
           </div>
+
+          {/* External Skill — admin only */}
+          {authUser?.permissions.includes("approve_positions") && (
+            <div style={{ marginTop: 20, padding: 14, border: "1px solid #e0e7ff", borderRadius: 10, background: "#f8f9ff" }}>
+              <h3 style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700 }}>Add External Skill (Pending Approval)</h3>
+              <p style={{ margin: "0 0 12px", fontSize: 12, opacity: 0.65 }}>
+                Submit a skill this member acquired prior to joining. It will appear on the Approvals page for review before taking effect.
+              </p>
+              <form onSubmit={addExternalSkill} style={{ display: "grid", gap: 8, maxWidth: 520 }}>
+                <select
+                  value={extSkillForm.position_id}
+                  onChange={(e) => {
+                    const pid = e.target.value;
+                    setExtSkillForm((f) => ({ ...f, position_id: pid, task_id: "" }));
+                    if (pid) ensurePositionLoaded(pid);
+                  }}
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                >
+                  <option value="">All available tasks (no specific position)</option>
+                  {memberPositions.map((mp) => (
+                    <option key={mp.position_id} value={mp.position_id}>
+                      {mp.positions?.code ?? mp.position_id} — {mp.positions?.name ?? ""}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={extSkillForm.task_id}
+                  onChange={(e) => setExtSkillForm((f) => ({ ...f, task_id: e.target.value }))}
+                  required
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                >
+                  <option value="">Select task…</option>
+                  {extSkillTasks.map((t) => (
+                    <option key={t.id} value={t.id}>{t.task_code} — {t.task_name}</option>
+                  ))}
+                </select>
+
+                <textarea
+                  value={extSkillForm.pending_reason}
+                  onChange={(e) => setExtSkillForm((f) => ({ ...f, pending_reason: e.target.value }))}
+                  placeholder="Reason / context for approval (required)…"
+                  required
+                  rows={3}
+                  style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid #cbd5e1", resize: "vertical", fontFamily: "inherit", fontSize: 13 }}
+                />
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    value={extSkillForm.hours}
+                    onChange={(e) => setExtSkillForm((f) => ({ ...f, hours: e.target.value }))}
+                    placeholder="Hours (optional)"
+                    style={{ width: 140, padding: "6px 8px", borderRadius: 6, border: "1px solid #cbd5e1" }}
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy || !extSkillForm.task_id || !extSkillForm.pending_reason.trim()}
+                    style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #6366f1", background: "#eef2ff", cursor: "pointer", fontWeight: 600, fontSize: 13 }}
+                  >
+                    Submit for Approval
+                  </button>
+                </div>
+
+                {extSkillMsg && (
+                  <div style={{ fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid #a5f3fc", background: "#f0fdfe", color: "#0e7490" }}>
+                    {extSkillMsg}
+                  </div>
+                )}
+              </form>
+            </div>
+          )}
 
           {memberPositions.length === 0 ? (
             <p style={{ opacity: 0.7, marginTop: 10 }}>No positions assigned yet.</p>
