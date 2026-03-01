@@ -77,21 +77,20 @@ export async function GET() {
 
   // Attach SAR typing fields to each member
   const data = (membersRes.data ?? []).map((m: any) => {
-    const positions = (validPositionsByMember.get(m.id) ?? [])
-      .filter(Boolean)
+    const allPositions = (validPositionsByMember.get(m.id) ?? []).filter(Boolean);
+    const landSarPositions = allPositions
+      .filter((p: any) => p.position_type === "land_sar")
       .sort((a: any, b: any) => (b.level ?? 0) - (a.level ?? 0));
 
-    const primary = positions[0] ?? null;
-    const hasFemaTyping = positions.some((p: any) => p.position_type === "land_sar");
+    const primary = landSarPositions[0] ?? null;
 
     return {
       ...m,
-      sar_codes: positions.map((p: any) => p.code).join(", ") || null,
-      sar_positions: positions.map((p: any) => `${p.code} — ${p.name}`).join(", ") || null,
+      sar_codes: landSarPositions.map((p: any) => p.code).join(", ") || null,
+      sar_positions: landSarPositions.map((p: any) => `${p.code} — ${p.name}`).join(", ") || null,
       sar_primary_code: primary?.code ?? null,
       sar_primary_name: primary?.name ?? null,
       sar_primary_rank: primary?.level ?? null,
-      // Capabilities: always show field roles (e.g. NAVIGATOR, MEDIC) regardless of land_sar typing
       field_roles: fieldRolesByMember.get(m.id) ?? [],
       roster_certs: rosterCertsByMember.get(m.id) ?? [],
     };
