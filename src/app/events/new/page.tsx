@@ -3,6 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function combineDateTimeToIso(dateStr: string, timeStr: string) {
+  if (!dateStr || !timeStr) return null;
+  const dt = new Date(`${dateStr}T${timeStr}`);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt.toISOString();
+}
+
 export default function NewEventPage() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -11,6 +22,11 @@ export default function NewEventPage() {
 
   const [form, setForm] = useState({
     title: "",
+    start_date: "",
+    start_hour: "09",
+    start_minute: "00",
+    end_hour: "",
+    end_minute: "",
     location_text: "",
     description: "",
     visibility: "members",
@@ -37,11 +53,18 @@ export default function NewEventPage() {
     setBusy(true);
     setError("");
 
+    const start_dt = combineDateTimeToIso(form.start_date, `${form.start_hour}:${form.start_minute}`);
+    const end_dt = form.end_hour
+      ? combineDateTimeToIso(form.start_date, `${form.end_hour}:${form.end_minute || "00"}`)
+      : null;
+
     const res = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title: form.title.trim(),
+        start_dt: start_dt ?? undefined,
+        end_dt,
         location_text: form.location_text ? form.location_text.trim() : null,
         description: form.description ? form.description.trim() : null,
         visibility: form.visibility,
@@ -80,6 +103,39 @@ export default function NewEventPage() {
         <div style={{ display: "grid", gap: 4 }}>
           <label style={{ fontSize: 13, fontWeight: 600 }}>Title *</label>
           <input style={inputStyle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g., Fundraiser, Demo, Standby" required />
+        </div>
+
+        <div style={{ display: "grid", gap: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>Date *</label>
+          <input style={inputStyle} type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} required />
+        </div>
+
+        <div style={{ display: "grid", gap: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>Start Time</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select style={{ ...inputStyle, width: "auto" }} value={form.start_hour} onChange={(e) => setForm({ ...form, start_hour: e.target.value })}>
+              {Array.from({ length: 24 }, (_, i) => pad2(i)).map((h) => <option key={h} value={h}>{h}</option>)}
+            </select>
+            <span>:</span>
+            <select style={{ ...inputStyle, width: "auto" }} value={form.start_minute} onChange={(e) => setForm({ ...form, start_minute: e.target.value })}>
+              {Array.from({ length: 60 }, (_, i) => pad2(i)).map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 4 }}>
+          <label style={{ fontSize: 13, fontWeight: 600 }}>End Time (optional)</label>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <select style={{ ...inputStyle, width: "auto" }} value={form.end_hour} onChange={(e) => setForm({ ...form, end_hour: e.target.value })}>
+              <option value="">(none)</option>
+              {Array.from({ length: 24 }, (_, i) => pad2(i)).map((h) => <option key={h} value={h}>{h}</option>)}
+            </select>
+            <span>:</span>
+            <select style={{ ...inputStyle, width: "auto" }} value={form.end_minute} onChange={(e) => setForm({ ...form, end_minute: e.target.value })} disabled={!form.end_hour}>
+              <option value="">(none)</option>
+              {Array.from({ length: 60 }, (_, i) => pad2(i)).map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
         </div>
 
         <div style={{ display: "grid", gap: 4 }}>
@@ -137,7 +193,7 @@ export default function NewEventPage() {
         <div style={{ display: "flex", gap: 10 }}>
           <button
             type="submit"
-            disabled={busy || !form.title.trim()}
+            disabled={busy || !form.title.trim() || !form.start_date}
             style={{ padding: "10px 24px", background: busy ? "#94a3b8" : "#1e40af", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer" }}
           >
             {busy ? "Creating…" : "Create Event"}
