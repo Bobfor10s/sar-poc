@@ -15,6 +15,25 @@ async function getIdFromCtx(ctx: any): Promise<string> {
   return "";
 }
 
+export async function GET(_req: Request, ctx: any) {
+  const check = await requireAuth();
+  if (!check.ok) return check.response;
+
+  const event_id = await getIdFromCtx(ctx);
+  if (!event_id || !isUuid(event_id)) {
+    return NextResponse.json({ error: `bad event id: ${event_id || "(missing)"}` }, { status: 400 });
+  }
+
+  const { data, error } = await supabaseDb
+    .from("event_attendance")
+    .select("id, member_id, time_in, time_out, members:member_id(first_name, last_name)")
+    .eq("event_id", event_id)
+    .order("time_in", { ascending: true });
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json(data ?? []);
+}
+
 export async function POST(req: Request, ctx: any) {
   const check = await requireAuth();
   if (!check.ok) return check.response;
@@ -39,6 +58,22 @@ export async function POST(req: Request, ctx: any) {
   const action = String(body.action ?? "").toLowerCase();
   if (action !== "arrive" && action !== "clear") {
     return NextResponse.json({ error: "action must be 'arrive' or 'clear'" }, { status: 400 });
+  }
+
+  // Block check-in if event hasn't started or has already ended
+  if (action === "arrive") {
+    const { data: ev } = await supabaseDb
+      .from("events")
+      .select("start_dt, end_dt")
+      .eq("id", event_id)
+      .single();
+    const now = new Date();
+    if (ev?.start_dt && new Date(ev.start_dt) > now) {
+      return NextResponse.json({ error: "Event hasn't started yet" }, { status: 400 });
+    }
+    if (ev?.end_dt && new Date(ev.end_dt) <= now) {
+      return NextResponse.json({ error: "Event is already closed" }, { status: 400 });
+    }
   }
 
   const checkin_override_note = body.checkin_override_note ? String(body.checkin_override_note) : undefined;

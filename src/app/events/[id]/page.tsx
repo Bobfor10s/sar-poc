@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+type AttendanceRow = {
+  id: string;
+  member_id: string;
+  time_in: string | null;
+  time_out: string | null;
+  members: { first_name: string; last_name: string } | null;
+};
+
 type EventDetail = {
   id: string;
   title: string;
@@ -12,6 +20,21 @@ type EventDetail = {
   description?: string | null;
   status?: string | null;
   created_at?: string | null;
+};
+
+function computeStatus(e: EventDetail): "scheduled" | "open" | "closed" {
+  const now = new Date();
+  const start = e.start_dt ? new Date(e.start_dt) : null;
+  const end = e.end_dt ? new Date(e.end_dt) : null;
+  if (!start || now < start) return "scheduled";
+  if (!end || now < end) return "open";
+  return "closed";
+}
+
+const statusChip: Record<string, React.CSSProperties> = {
+  scheduled: { background: "#eff6ff", borderColor: "#3b82f6", color: "#1e40af" },
+  open:      { background: "#f0fdf4", borderColor: "#22c55e", color: "#15803d", fontWeight: 700 },
+  closed:    { background: "#f4f4f4", borderColor: "#d1d5db", color: "#6b7280" },
 };
 
 function isUuid(v: string) {
@@ -59,6 +82,7 @@ export default function EventDetailPage() {
   const [msg, setMsg] = useState("");
   const [startLocal, setStartLocal] = useState("");
   const [endLocal, setEndLocal] = useState("");
+  const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
 
   async function load() {
     if (!eventId || !isUuid(eventId)) { setMsg(`Bad event id: ${eventId || "(missing)"}`); setLoading(false); return; }
@@ -71,6 +95,10 @@ export default function EventDetailPage() {
     setEvent(ev);
     setStartLocal(toLocalInputValue(ev?.start_dt));
     setEndLocal(toLocalInputValue(ev?.end_dt));
+
+    const attRes = await fetch(`/api/events/${eventId}/attendance`);
+    if (attRes.ok) setAttendance(await attRes.json().catch(() => []));
+
     setLoading(false);
   }
 
@@ -89,13 +117,36 @@ export default function EventDetailPage() {
         end_dt: endLocal ? localInputToIso(endLocal) : null,
         location_text: event.location_text ?? null,
         description: event.description ?? null,
-        status: event.status ?? "scheduled",
       }),
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) { setMsg(json?.error ?? "Save failed"); setBusy(false); return; }
-    setEvent(json.data ?? null);
+    const ev = json.data ?? null;
+    setEvent(ev);
+    setStartLocal(toLocalInputValue(ev?.start_dt));
+    setEndLocal(toLocalInputValue(ev?.end_dt));
     setMsg("Saved.");
+    setBusy(false);
+  }
+
+  async function patchNow(field: "start_dt" | "end_dt") {
+    if (!event) return;
+    setBusy(true);
+    setMsg("");
+    const now = new Date().toISOString();
+    const res = await fetch(`/api/events/${event.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: now }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) { setMsg(json?.error ?? "Failed"); setBusy(false); return; }
+    const ev = json.data ?? null;
+    setEvent(ev);
+    setStartLocal(toLocalInputValue(ev?.start_dt));
+    setEndLocal(toLocalInputValue(ev?.end_dt));
+    const attRes = await fetch(`/api/events/${event.id}/attendance`);
+    if (attRes.ok) setAttendance(await attRes.json().catch(() => []));
     setBusy(false);
   }
 
@@ -109,10 +160,47 @@ export default function EventDetailPage() {
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
         <h1 style={{ margin: 0 }}>{event?.title ?? "Event"}</h1>
+        {event && (() => {
+          const st = computeStatus(event);
+          return (
+            <span style={{ fontSize: 13, padding: "3px 10px", border: "1px solid #ddd", borderRadius: 999, ...statusChip[st] }}>
+              {st.charAt(0).toUpperCase() + st.slice(1)}
+            </span>
+          );
+        })()}
         <button type="button" onClick={load} disabled={busy} style={{ marginLeft: "auto" }}>
           Refresh
         </button>
       </div>
+
+      {/* Quick-action buttons */}
+      {event && (() => {
+        const st = computeStatus(event);
+        return (
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            {st === "scheduled" && (
+              <button
+                type="button"
+                onClick={() => patchNow("start_dt")}
+                disabled={busy}
+                style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid #22c55e", background: "#f0fdf4", color: "#15803d", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                Open Event
+              </button>
+            )}
+            {st === "open" && (
+              <button
+                type="button"
+                onClick={() => patchNow("end_dt")}
+                disabled={busy}
+                style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid #d1d5db", background: "#f4f4f4", color: "#374151", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+              >
+                Close Event
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {msg && (
         <div style={{ marginTop: 10, padding: 10, border: "1px solid #eee", borderRadius: 8, background: "#fafafa" }}>{msg}</div>
@@ -127,15 +215,6 @@ export default function EventDetailPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Title">
                 <input style={inputStyle} value={event.title ?? ""} onChange={(e) => setEvent({ ...event, title: e.target.value })} placeholder="Event title" />
-              </Field>
-
-              <Field label="Status">
-                <select style={inputStyle} value={(event.status ?? "scheduled").toLowerCase()} onChange={(e) => setEvent({ ...event, status: e.target.value })}>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="archived">Archived</option>
-                </select>
               </Field>
 
               <Field label="Start">
@@ -170,6 +249,38 @@ export default function EventDetailPage() {
                 Done
               </button>
             </div>
+          </section>
+
+          {/* Attendance list */}
+          <section style={{ ...sectionStyle, marginTop: 16 }}>
+            <h2 style={h2}>Attendance ({attendance.length})</h2>
+            {attendance.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 13, opacity: 0.65 }}>No check-ins yet.</p>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Member</th>
+                    <th style={thStyle}>Time In</th>
+                    <th style={thStyle}>Time Out</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attendance.map((a) => {
+                    const name = a.members
+                      ? `${a.members.last_name}, ${a.members.first_name}`
+                      : a.member_id;
+                    return (
+                      <tr key={a.id}>
+                        <td style={tdStyle}>{name}</td>
+                        <td style={tdStyle}>{a.time_in ? new Date(a.time_in).toLocaleTimeString() : "—"}</td>
+                        <td style={tdStyle}>{a.time_out ? new Date(a.time_out).toLocaleTimeString() : "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </section>
 
           <div style={{ fontSize: 12, opacity: 0.6, marginTop: 12 }}>
@@ -209,4 +320,19 @@ const inputStyle: React.CSSProperties = {
   border: "1px solid #ddd",
   fontSize: 13,
   width: "100%",
+};
+
+const thStyle: React.CSSProperties = {
+  textAlign: "left",
+  padding: "7px 10px",
+  borderBottom: "1px solid #ddd",
+  fontSize: 12,
+  opacity: 0.8,
+  background: "#fafafa",
+};
+
+const tdStyle: React.CSSProperties = {
+  padding: "7px 10px",
+  borderBottom: "1px solid #eee",
+  verticalAlign: "middle",
 };

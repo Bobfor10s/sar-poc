@@ -7,10 +7,23 @@ type EventRow = {
   id: string;
   title: string;
   start_dt?: string | null;
+  end_dt?: string | null;
   location_text?: string | null;
   status?: string | null;
   is_test?: boolean | null;
 };
+
+function computeStatus(e: EventRow): string {
+  const st = (e.status ?? "scheduled").toLowerCase();
+  if (st === "cancelled" || st === "archived") return st;
+  const now = new Date();
+  const start = e.start_dt ? new Date(e.start_dt) : null;
+  const end = e.end_dt ? new Date(e.end_dt) : null;
+  if (!start) return st;
+  if (now < start) return "scheduled";
+  if (!end || now < end) return "open";
+  return "closed";
+}
 
 function fmtDate(v?: string | null) {
   if (!v) return "";
@@ -27,8 +40,9 @@ function chipStyle(status: string): React.CSSProperties {
     borderRadius: 999,
     display: "inline-block",
   };
-  if (status === "scheduled") return { ...base, background: "#166534", borderColor: "#14532d", color: "#fff" };
-  if (status === "completed") return { ...base, background: "#cffafe", borderColor: "#22d3ee" };
+  if (status === "scheduled") return { ...base, background: "#eff6ff", borderColor: "#3b82f6", color: "#1e40af" };
+  if (status === "open") return { ...base, background: "#f0fdf4", borderColor: "#22c55e", color: "#15803d", fontWeight: 700 };
+  if (status === "closed") return { ...base, background: "#f4f4f4", borderColor: "#d1d5db", color: "#6b7280" };
   if (status === "cancelled") return { ...base, background: "#fff6f2", borderColor: "#fb923c" };
   if (status === "archived") return { ...base, background: "#f4f4f4", opacity: 0.8 };
   return base;
@@ -51,8 +65,7 @@ export default function EventsPage() {
 
   const visible = useMemo(() => {
     return events.filter((e) => {
-      const st = (e.status ?? "scheduled").toLowerCase();
-      if (!showArchived && st === "archived") return false;
+      if (!showArchived && computeStatus(e) === "archived") return false;
       return true;
     });
   }, [events, showArchived]);
@@ -94,7 +107,7 @@ export default function EventsPage() {
       ) : (
         <ul style={{ marginTop: 16, listStyle: "none", padding: 0 }}>
           {visible.map((ev) => {
-            const status = (ev.status ?? "scheduled").toLowerCase();
+            const status = computeStatus(ev);
             return (
               <li
                 key={ev.id}
