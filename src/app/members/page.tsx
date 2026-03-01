@@ -197,19 +197,21 @@ export default function MembersPage() {
             Refresh
           </button>
 
-          <Link
-            href="/members/new"
-            style={{
-              padding: "8px 12px",
-              borderRadius: 10,
-              border: "1px solid #ddd",
-              textDecoration: "none",
-              fontWeight: 700,
-              display: "inline-block",
-            }}
-          >
-            + Add Member
-          </Link>
+          {isAdmin && (
+            <Link
+              href="/members/new"
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                border: "1px solid #ddd",
+                textDecoration: "none",
+                fontWeight: 700,
+                display: "inline-block",
+              }}
+            >
+              + Add Member
+            </Link>
+          )}
         </div>
       </div>
 

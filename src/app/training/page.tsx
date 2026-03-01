@@ -45,6 +45,7 @@ export default function TrainingPage() {
   const [rows, setRows] = useState<TrainingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -54,7 +55,13 @@ export default function TrainingPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setIsAdmin(json?.user?.role === "admin"))
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const visible = useMemo(() => {
     return rows.filter((r) => {
@@ -68,20 +75,22 @@ export default function TrainingPage() {
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Training</h1>
-        <Link
-          href="/training/new"
-          style={{
-            padding: "8px 16px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            textDecoration: "none",
-            fontWeight: 700,
-            fontSize: 14,
-            display: "inline-block",
-          }}
-        >
-          + Add Training
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/training/new"
+            style={{
+              padding: "8px 16px",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              textDecoration: "none",
+              fontWeight: 700,
+              fontSize: 14,
+              display: "inline-block",
+            }}
+          >
+            + Add Training
+          </Link>
+        )}
       </div>
 
       <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>

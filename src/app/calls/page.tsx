@@ -41,6 +41,7 @@ export default function CallsPage() {
   const [calls, setCalls] = useState<CallRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   async function loadCalls() {
     setLoading(true);
@@ -52,6 +53,10 @@ export default function CallsPage() {
 
   useEffect(() => {
     loadCalls();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setIsAdmin(json?.user?.role === "admin"))
+      .catch(() => {});
   }, []);
 
   const visibleCalls = useMemo(() => {
@@ -66,20 +71,22 @@ export default function CallsPage() {
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Calls</h1>
-        <Link
-          href="/calls/new"
-          style={{
-            padding: "8px 16px",
-            borderRadius: 10,
-            border: "1px solid #ddd",
-            textDecoration: "none",
-            fontWeight: 700,
-            fontSize: 14,
-            display: "inline-block",
-          }}
-        >
-          + Add Call
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/calls/new"
+            style={{
+              padding: "8px 16px",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              textDecoration: "none",
+              fontWeight: 700,
+              fontSize: 14,
+              display: "inline-block",
+            }}
+          >
+            + Add Call
+          </Link>
+        )}
       </div>
 
       <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
