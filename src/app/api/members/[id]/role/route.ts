@@ -8,7 +8,7 @@ function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
-const VALID_ROLES = ["member", "viewer", "admin"];
+const ALLOWED_ROLES = new Set(["member", "viewer", "admin"]);
 
 export async function PATCH(req: Request, ctx: Ctx) {
   const check = await requirePermission("manage_members");
@@ -20,28 +20,17 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const role = String(body.role ?? "").trim();
+  const role = String(body.role ?? "").trim().toLowerCase();
 
-  if (!VALID_ROLES.includes(role)) {
-    return NextResponse.json(
-      { error: `Invalid role. Must be one of: ${VALID_ROLES.join(", ")}` },
-      { status: 400 }
-    );
-  }
-
-  // Prevent admin from removing their own admin role
-  if (id === check.auth.member.id && role !== "admin" && check.auth.role === "admin") {
-    return NextResponse.json(
-      { error: "You cannot remove your own admin role" },
-      { status: 403 }
-    );
+  if (!ALLOWED_ROLES.has(role)) {
+    return NextResponse.json({ error: "role must be member | viewer | admin" }, { status: 400 });
   }
 
   const { data, error } = await supabaseDb
     .from("members")
     .update({ role })
     .eq("id", id)
-    .select("id, first_name, last_name, role")
+    .select("id, first_name, last_name, email, role")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
