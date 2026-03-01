@@ -30,12 +30,14 @@ export default function Nav() {
       .catch(() => setUser(null));
   }, [pathname]);
 
-  // Hide nav on login and portal pages
-  if (pathname === "/login" || pathname.startsWith("/portal")) return null;
+  // Hide nav on login; hide on portal only for members (admins can view portal with Nav)
+  if (pathname === "/login") return null;
+  if (pathname.startsWith("/portal") && (user === null || user.role === "member")) return null;
 
   const perms = new Set(user?.permissions ?? []);
 
   const generalLinks = [
+    { href: "/portal", label: "My Status", always: true },
     { href: "/members", label: "Members", always: true },
     { href: "/calls", label: "Calls", perm: "read_all" },
     { href: "/training", label: "Training", perm: "read_all" },

@@ -95,6 +95,7 @@ export default function PortalPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [memberName, setMemberName] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -129,6 +130,7 @@ export default function PortalPage() {
       if (meRes.ok) {
         const me = await meRes.json().catch(() => ({}));
         if (me?.user?.name) setMemberName(me.user.name);
+        if (me?.user?.role) setUserRole(me.user.role);
       }
     } finally {
       setLoading(false);
@@ -260,16 +262,22 @@ export default function PortalPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <h1 style={{ margin: 0 }}>{memberName ? `${memberName}'s Portal` : "My Portal"}</h1>
-        <button
-          onClick={logout}
-          disabled={loggingOut}
-          style={{ fontSize: 13, padding: "6px 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569", cursor: "pointer" }}
-        >
-          {loggingOut ? "Signing out…" : "Sign out"}
-        </button>
-      </div>
+      {/* Members: full portal header with logout. Admins/viewers: simple heading (Nav handles name + logout) */}
+      {userRole === "member" && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <h1 style={{ margin: 0 }}>{memberName ? `${memberName}'s Portal` : "My Portal"}</h1>
+          <button
+            onClick={logout}
+            disabled={loggingOut}
+            style={{ fontSize: 13, padding: "6px 14px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#f8fafc", color: "#475569", cursor: "pointer" }}
+          >
+            {loggingOut ? "Signing out…" : "Sign out"}
+          </button>
+        </div>
+      )}
+      {userRole && userRole !== "member" && (
+        <h1 style={{ margin: "0 0 16px" }}>My Attendance Status</h1>
+      )}
 
       {loading && <p style={{ opacity: 0.6, fontSize: 14 }}>Loading…</p>}
       {!loading && <>

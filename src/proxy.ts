@@ -49,13 +49,10 @@ export default async function proxy(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Role-based routing: members → /portal; non-members away from /portal
+  // Role-based routing: members → /portal automatically; others can visit /portal voluntarily
   const role = request.cookies.get("sar-role")?.value;
   if (role === "member" && !pathname.startsWith("/portal") && !pathname.startsWith("/api")) {
     return NextResponse.redirect(new URL("/portal", request.url));
-  }
-  if (role && role !== "member" && pathname.startsWith("/portal")) {
-    return NextResponse.redirect(new URL("/members", request.url));
   }
 
   return response;
