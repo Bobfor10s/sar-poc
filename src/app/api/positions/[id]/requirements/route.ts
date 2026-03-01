@@ -6,6 +6,7 @@ function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getIdFromCtx(ctx: any): Promise<string> {
   const p = ctx?.params;
   const resolved = p && typeof p.then === "function" ? await p : p;
@@ -15,6 +16,7 @@ async function getIdFromCtx(ctx: any): Promise<string> {
   return "";
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function GET(_req: Request, ctx: any) {
   const check = await requirePermission("read_all");
   if (!check.ok) return check.response;
@@ -33,7 +35,9 @@ export async function GET(_req: Request, ctx: any) {
       notes,
       within_months,
       min_count,
+      activity_type,
       task_id,
+      req_group_id,
       courses:course_id ( id, code, name ),
       required_position:required_position_id ( id, code, name ),
       tasks:task_id ( id, task_code, task_name )
@@ -42,6 +46,15 @@ export async function GET(_req: Request, ctx: any) {
     .order("created_at", { ascending: true });
 
   if (req.error) return NextResponse.json({ error: req.error.message }, { status: 500 });
+
+  // Requirement groups
+  const groups = await supabaseDb
+    .from("position_req_groups")
+    .select("id, label, min_met, created_at")
+    .eq("position_id", position_id)
+    .order("created_at", { ascending: true });
+
+  if (groups.error) return NextResponse.json({ error: groups.error.message }, { status: 500 });
 
   // Tasks (for taskbook style signoffs)
   const tasks = await supabaseDb
@@ -55,11 +68,13 @@ export async function GET(_req: Request, ctx: any) {
   return NextResponse.json({
     data: {
       requirements: req.data ?? [],
+      groups: groups.data ?? [],
       tasks: tasks.data ?? [],
     },
   });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function POST(req: Request, ctx: any) {
   const check = await requirePermission("manage_positions");
   if (!check.ok) return check.response;
@@ -117,6 +132,11 @@ export async function POST(req: Request, ctx: any) {
     }
   }
 
+  // Optionally assign to a requirement group
+  if (body.req_group_id && isUuid(String(body.req_group_id))) {
+    payload.req_group_id = String(body.req_group_id);
+  }
+
   const { data, error } = await supabaseDb
     .from("position_requirements")
     .insert(payload)
@@ -127,6 +147,7 @@ export async function POST(req: Request, ctx: any) {
   return NextResponse.json({ data }, { status: 201 });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function DELETE(req: Request, ctx: any) {
   const check = await requirePermission("manage_positions");
   if (!check.ok) return check.response;

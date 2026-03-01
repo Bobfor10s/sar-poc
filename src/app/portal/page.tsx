@@ -92,6 +92,7 @@ export default function PortalPage() {
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [memberName, setMemberName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Per-card state: geo error messages, override note state
@@ -104,16 +105,21 @@ export default function PortalPage() {
 
   async function loadAll() {
     try {
-      const [evRes, upcomingRes, histRes, statsRes] = await Promise.all([
+      const [evRes, upcomingRes, histRes, statsRes, meRes] = await Promise.all([
         fetch("/api/active-events"),
         fetch("/api/upcoming-activities"),
         fetch("/api/activity/history"),
         fetch("/api/activity/stats"),
+        fetch("/api/auth/me"),
       ]);
       if (evRes.ok) setEvents(await evRes.json().catch(() => []));
       if (upcomingRes.ok) setUpcoming(await upcomingRes.json().catch(() => []));
       if (histRes.ok) setHistory(await histRes.json().catch(() => []));
       if (statsRes.ok) setStats(await statsRes.json().catch(() => null));
+      if (meRes.ok) {
+        const me = await meRes.json().catch(() => ({}));
+        if (me?.user?.name) setMemberName(me.user.name);
+      }
     } finally {
       setLoading(false);
     }
@@ -243,7 +249,7 @@ export default function PortalPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
-      <h1 style={{ marginTop: 0 }}>My Portal</h1>
+      <h1 style={{ marginTop: 0 }}>{memberName ? `${memberName}'s Portal` : "My Portal"}</h1>
 
       {/* Active Events */}
       <section>
