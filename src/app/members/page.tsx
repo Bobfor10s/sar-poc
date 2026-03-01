@@ -332,7 +332,8 @@ export default function MembersPage() {
 
                     <td style={td}>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                        {typing && (
+                        {/* Land SAR typing if they have it, otherwise Searcher */}
+                        {typing ? (
                           <span
                             style={{
                               display: "inline-block",
@@ -347,7 +348,22 @@ export default function MembersPage() {
                           >
                             {typing}
                           </span>
+                        ) : (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              border: "1px solid #94a3b8",
+                              background: "#f1f5f9",
+                              fontSize: 12,
+                              fontWeight: 600,
+                            }}
+                          >
+                            Searcher
+                          </span>
                         )}
+                        {/* Field role capabilities (NAVIGATOR, MEDIC, etc.) */}
                         {(m.field_roles ?? []).map((code) => (
                           <span
                             key={code}
@@ -363,6 +379,7 @@ export default function MembersPage() {
                             {code}
                           </span>
                         ))}
+                        {/* Roster certs */}
                         {(m.roster_certs ?? []).map((code) => (
                           <span
                             key={code}
@@ -378,9 +395,6 @@ export default function MembersPage() {
                             {code}
                           </span>
                         ))}
-                        {!typing && !(m.field_roles?.length) && !(m.roster_certs?.length) && (
-                          <span style={{ opacity: 0.5 }}>—</span>
-                        )}
                       </div>
                     </td>
 

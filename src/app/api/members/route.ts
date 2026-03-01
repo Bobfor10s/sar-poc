@@ -91,8 +91,8 @@ export async function GET() {
       sar_primary_code: primary?.code ?? null,
       sar_primary_name: primary?.name ?? null,
       sar_primary_rank: primary?.level ?? null,
-      // Capabilities: field roles shown when no FEMA typing, plus always show roster certs
-      field_roles: hasFemaTyping ? [] : (fieldRolesByMember.get(m.id) ?? []),
+      // Capabilities: always show field roles (e.g. NAVIGATOR, MEDIC) regardless of land_sar typing
+      field_roles: fieldRolesByMember.get(m.id) ?? [],
       roster_certs: rosterCertsByMember.get(m.id) ?? [],
     };
   });
