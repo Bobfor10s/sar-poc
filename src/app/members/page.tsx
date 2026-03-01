@@ -256,13 +256,14 @@ export default function MembersPage() {
               <Th onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir}>
                 Name
               </Th>
-              {isAdmin && <th style={th}>Role</th>}
+              {isAdmin && <th style={th}>Access</th>}
               <Th onClick={() => toggleSort("onsite")} active={sortKey === "onsite"} dir={sortDir}>
                 Location
               </Th>
               <Th onClick={() => toggleSort("sar")} active={sortKey === "sar"} dir={sortDir}>
-                Capabilities
+                Role
               </Th>
+              <th style={th}>Capabilities</th>
               <Th onClick={() => toggleSort("status")} active={sortKey === "status"} dir={sortDir}>
                 Status
               </Th>
@@ -278,13 +279,13 @@ export default function MembersPage() {
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={isAdmin ? 7 : 6} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={isAdmin ? 8 : 7} style={{ padding: 14, opacity: 0.75 }}>
                   Loading…
                 </td>
               </tr>
             ) : sorted.length === 0 ? (
               <tr>
-                <td colSpan={isAdmin ? 7 : 6} style={{ padding: 14, opacity: 0.75 }}>
+                <td colSpan={isAdmin ? 8 : 7} style={{ padding: 14, opacity: 0.75 }}>
                   No members found.
                 </td>
               </tr>
@@ -330,40 +331,27 @@ export default function MembersPage() {
                       )}
                     </td>
 
+                    {/* Role: Searcher or land_sar typing */}
+                    <td style={td}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          border: "1px solid #94a3b8",
+                          background: typing ? "#e2e8f0" : "#f1f5f9",
+                          fontSize: 12,
+                          fontWeight: 600,
+                        }}
+                        title={m.sar_positions ?? ""}
+                      >
+                        {typing || "Searcher"}
+                      </span>
+                    </td>
+
+                    {/* Capabilities: field roles + roster certs */}
                     <td style={td}>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
-                        {/* Land SAR typing if they have it, otherwise Searcher */}
-                        {typing ? (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              padding: "2px 8px",
-                              borderRadius: 999,
-                              border: "1px solid #94a3b8",
-                              background: "#e2e8f0",
-                              fontSize: 12,
-                              fontWeight: 600,
-                            }}
-                            title={m.sar_positions ?? ""}
-                          >
-                            {typing}
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: "inline-block",
-                              padding: "2px 8px",
-                              borderRadius: 999,
-                              border: "1px solid #94a3b8",
-                              background: "#f1f5f9",
-                              fontSize: 12,
-                              fontWeight: 600,
-                            }}
-                          >
-                            Searcher
-                          </span>
-                        )}
-                        {/* Field role capabilities (NAVIGATOR, MEDIC, etc.) */}
                         {(m.field_roles ?? []).map((code) => (
                           <span
                             key={code}
@@ -379,7 +367,6 @@ export default function MembersPage() {
                             {code}
                           </span>
                         ))}
-                        {/* Roster certs */}
                         {(m.roster_certs ?? []).map((code) => (
                           <span
                             key={code}
@@ -395,6 +382,9 @@ export default function MembersPage() {
                             {code}
                           </span>
                         ))}
+                        {!(m.field_roles?.length) && !(m.roster_certs?.length) && (
+                          <span style={{ opacity: 0.4 }}>—</span>
+                        )}
                       </div>
                     </td>
 
