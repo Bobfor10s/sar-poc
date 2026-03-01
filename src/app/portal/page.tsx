@@ -136,9 +136,10 @@ export default function PortalPage() {
   }
 
   useEffect(() => {
-    // Show stored name immediately while the API call resolves
-    const stored = sessionStorage.getItem("sar-display-name");
-    if (stored) setMemberName(stored);
+    try {
+      const stored = sessionStorage.getItem("sar-display-name");
+      if (stored) setMemberName(stored);
+    } catch { /* sessionStorage unavailable in some privacy modes */ }
 
     loadAll();
     pollRef.current = setInterval(loadAll, 30000);
@@ -257,10 +258,6 @@ export default function PortalPage() {
     doCheckin(ev, "arrive", note.trim());
   }
 
-  if (loading) {
-    return <main style={{ padding: 24, fontFamily: "system-ui" }}>Loading…</main>;
-  }
-
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -273,6 +270,9 @@ export default function PortalPage() {
           {loggingOut ? "Signing out…" : "Sign out"}
         </button>
       </div>
+
+      {loading && <p style={{ opacity: 0.6, fontSize: 14 }}>Loading…</p>}
+      {!loading && <>
 
       {/* Active Events */}
       <section>
@@ -533,6 +533,7 @@ export default function PortalPage() {
           </div>
         )}
       </section>
+      </>}
     </main>
   );
 }
