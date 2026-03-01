@@ -55,6 +55,7 @@ export default function PositionDetailPage() {
   const [editPos, setEditPos] = useState<Partial<Position>>({});
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
 
   const [reqForm, setReqForm] = useState({
     req_kind: "task",
@@ -92,7 +93,13 @@ export default function PositionDetailPage() {
     setGroups(detailJson.data?.groups ?? []);
   }
 
-  useEffect(() => { load(); }, [positionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setCanEdit(json?.user?.role !== "viewer"))
+      .catch(() => {});
+  }, [positionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function savePosition(e: React.FormEvent) {
     e.preventDefault();
@@ -288,11 +295,13 @@ export default function PositionDetailPage() {
             <input type="checkbox" checked={editPos.is_active ?? true} onChange={(e) => setEditPos({ ...editPos, is_active: e.target.checked })} />
             Active
           </label>
-          <div>
-            <button type="submit" disabled={busy === "save"} style={btnStyle}>
-              {busy === "save" ? "Saving…" : "Save"}
-            </button>
-          </div>
+          {canEdit && (
+            <div>
+              <button type="submit" disabled={busy === "save"} style={btnStyle}>
+                {busy === "save" ? "Saving…" : "Save"}
+              </button>
+            </div>
+          )}
         </form>
       </section>
 

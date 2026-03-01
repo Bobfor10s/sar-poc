@@ -37,6 +37,7 @@ export default function CourseDetailPage() {
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [msg, setMsg] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
 
   useEffect(() => {
     if (!courseId) return;
@@ -58,6 +59,10 @@ export default function CourseDetailPage() {
         }
       })
       .catch(() => setMsg("Failed to load course."));
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setCanEdit(json?.user?.role !== "viewer"))
+      .catch(() => {});
   }, [courseId]);
 
   async function save(e: React.FormEvent) {
@@ -210,15 +215,17 @@ export default function CourseDetailPage() {
             </div>
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={busy}
-              style={{ padding: "8px 20px", borderRadius: 8, background: "#1e40af", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-            >
-              {busy ? "Saving…" : "Save"}
-            </button>
-          </div>
+          {canEdit && (
+            <div>
+              <button
+                type="submit"
+                disabled={busy}
+                style={{ padding: "8px 20px", borderRadius: 8, background: "#1e40af", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+              >
+                {busy ? "Saving…" : "Save"}
+              </button>
+            </div>
+          )}
         </form>
       </section>
     </div>

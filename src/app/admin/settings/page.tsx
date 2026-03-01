@@ -16,6 +16,7 @@ export default function AdminSettingsPage() {
   const [windowDays, setWindowDays] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/settings")
@@ -35,6 +36,10 @@ export default function AdminSettingsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setCanEdit(json?.user?.role !== "viewer"))
+      .catch(() => {});
   }, [router]);
 
   async function save(e: React.FormEvent) {
@@ -82,9 +87,11 @@ export default function AdminSettingsPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <button type="submit" disabled={saving || !windowDays}>
-            {saving ? "Saving…" : "Save"}
-          </button>
+          {canEdit && (
+            <button type="submit" disabled={saving || !windowDays}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+          )}
           {msg && <span style={{ fontSize: 13, color: msg === "Saved." ? "#15803d" : "#dc2626" }}>{msg}</span>}
         </div>
       </form>

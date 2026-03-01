@@ -83,6 +83,7 @@ export default function EventDetailPage() {
   const [startLocal, setStartLocal] = useState("");
   const [endLocal, setEndLocal] = useState("");
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
+  const [canEdit, setCanEdit] = useState(false);
 
   async function load() {
     if (!eventId || !isUuid(eventId)) { setMsg(`Bad event id: ${eventId || "(missing)"}`); setLoading(false); return; }
@@ -102,7 +103,13 @@ export default function EventDetailPage() {
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setCanEdit(json?.user?.role !== "viewer"))
+      .catch(() => {});
+  }, [eventId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function save() {
     if (!event) return;
@@ -237,14 +244,16 @@ export default function EventDetailPage() {
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
-              <button
-                type="button"
-                onClick={save}
-                disabled={busy || !String(event.title ?? "").trim()}
-                style={{ padding: "8px 20px", background: busy ? "#94a3b8" : "#1e40af", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer" }}
-              >
-                {busy ? "Saving…" : "Save"}
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={busy || !String(event.title ?? "").trim()}
+                  style={{ padding: "8px 20px", background: busy ? "#94a3b8" : "#1e40af", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer" }}
+                >
+                  {busy ? "Saving…" : "Save"}
+                </button>
+              )}
               <button type="button" onClick={() => router.push("/events")} disabled={busy} style={{ padding: "8px 20px", background: "#f1f5f9", border: "1px solid #ddd", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
                 Done
               </button>

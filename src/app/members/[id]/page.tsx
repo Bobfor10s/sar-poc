@@ -685,7 +685,9 @@ export default function MemberDetailPage() {
                 </span>
               ) : null}
 
-              <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              {authUser?.role !== "viewer" && (
+                <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+              )}
             </div>
           </form>
 

@@ -158,6 +158,7 @@ export default function TrainingDetailPage() {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);
 
   function useMyLocation() {
     if (!navigator.geolocation) {
@@ -223,7 +224,13 @@ export default function TrainingDetailPage() {
     }
   }
 
-  useEffect(() => { loadAll(); }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    loadAll();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setCanEdit(json?.user?.role !== "viewer"))
+      .catch(() => {});
+  }, [sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   // ── Open / Close training ─────────────────────────────────────────────────
@@ -665,9 +672,11 @@ export default function TrainingDetailPage() {
         </div>
 
         <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
-          <button type="button" onClick={saveSession} disabled={busy !== ""}>
-            {busy === "save" ? "Saving…" : "Save"}
-          </button>
+          {canEdit && (
+            <button type="button" onClick={saveSession} disabled={busy !== ""}>
+              {busy === "save" ? "Saving…" : "Save"}
+            </button>
+          )}
           {session?.is_test ? <span style={{ ...muted, padding: "2px 8px", border: "1px solid #ddd", borderRadius: 999 }}>TEST</span> : null}
         </div>
       </section>

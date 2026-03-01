@@ -114,6 +114,8 @@ export default function CallDetailPage() {
   const [rowEdits, setRowEdits] = useState<Record<string, { time_in: string; time_out: string }>>({});
   const [savingRow, setSavingRow] = useState("");
 
+  const [canEdit, setCanEdit] = useState(false);
+
   // Skill sign-off form
   const [signoffForm, setSignoffForm] = useState({ member_id: "", task_id: "", evaluator_name: "", notes: "", hours: "" });
   const [busySignoff, setBusySignoff] = useState(false);
@@ -232,6 +234,10 @@ export default function CallDetailPage() {
 
   useEffect(() => {
     loadAll();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setCanEdit(json?.user?.role !== "viewer"))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callId]);
 
@@ -460,14 +466,16 @@ export default function CallDetailPage() {
             </div>
 
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={saveGeo}
-                disabled={busy === "geo" || gpsLoading}
-                style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, cursor: "pointer" }}
-              >
-                {busy === "geo" ? "Saving…" : "Save Geofence"}
-              </button>
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={saveGeo}
+                  disabled={busy === "geo" || gpsLoading}
+                  style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13, cursor: "pointer" }}
+                >
+                  {busy === "geo" ? "Saving…" : "Save Geofence"}
+                </button>
+              )}
               {geoSaveMsg && (
                 <span style={{ fontSize: 12, color: geoSaveMsg === "Saved." ? "#15803d" : "#dc2626" }}>
                   {geoSaveMsg}
@@ -577,7 +585,7 @@ export default function CallDetailPage() {
                           />
                         </td>
                         <td style={tdStyle}>
-                          {isDirty && (
+                          {isDirty && canEdit && (
                             <button
                               type="button"
                               onClick={() => saveRowTime(a.id)}

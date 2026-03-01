@@ -48,6 +48,7 @@ export default function TaskDetailPage() {
   const [busy, setBusy] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [msg, setMsg] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
 
   const [reqForm, setReqForm] = useState({
     req_kind: "course",
@@ -78,7 +79,13 @@ export default function TaskDetailPage() {
     setSignoffs((await soRes.json().catch(() => ({}))).data ?? []);
   }
 
-  useEffect(() => { load(); }, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load();
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((json) => setCanEdit(json?.user?.role !== "viewer"))
+      .catch(() => {});
+  }, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveTask(e: React.FormEvent) {
     e.preventDefault();
@@ -235,11 +242,13 @@ export default function TaskDetailPage() {
             <input type="checkbox" checked={edit.is_active ?? true} onChange={(e) => setEdit({ ...edit, is_active: e.target.checked })} />
             Active
           </label>
-          <div>
-            <button type="submit" disabled={busy === "save"} style={btnStyle}>
-              {busy === "save" ? "Saving…" : "Save"}
-            </button>
-          </div>
+          {canEdit && (
+            <div>
+              <button type="submit" disabled={busy === "save"} style={btnStyle}>
+                {busy === "save" ? "Saving…" : "Save"}
+              </button>
+            </div>
+          )}
         </form>
       </section>
 
