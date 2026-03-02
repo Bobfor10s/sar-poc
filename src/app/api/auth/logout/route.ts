@@ -19,5 +19,6 @@ export async function POST(req: Request) {
 
   const response = NextResponse.json({ ok: true });
   response.cookies.set("sar-log-id", "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
+  response.cookies.set("sar-log-skip", "", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 0 });
   return response;
 }

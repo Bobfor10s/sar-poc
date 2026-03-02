@@ -6,6 +6,7 @@ export async function logActivity(
   details?: Record<string, unknown>
 ) {
   const cookieHeader = (req as any).headers.get("cookie") ?? "";
+  if (/sar-log-skip=1/.test(cookieHeader)) return;
   const match = cookieHeader.match(/sar-log-id=([^;]+)/);
   const loginLogId = match?.[1]?.trim() ?? null;
   if (!loginLogId) return;

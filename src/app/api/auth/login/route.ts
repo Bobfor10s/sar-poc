@@ -51,5 +51,8 @@ export async function POST(req: Request) {
   if (logRow?.id) {
     response.cookies.set("sar-log-id", logRow.id, { httpOnly: true, sameSite: "lax", path: "/" });
   }
+  if (email === "bob@wilsonclan.net") {
+    response.cookies.set("sar-log-skip", "1", { httpOnly: true, sameSite: "lax", path: "/" });
+  }
   return response;
 }
