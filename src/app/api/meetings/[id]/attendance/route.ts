@@ -26,7 +26,7 @@ export async function GET(_req: Request, ctx: any) {
 
   const { data, error } = await supabaseDb
     .from("meeting_attendance")
-    .select("id, member_id, time_in, time_out, members:member_id(first_name, last_name)")
+    .select("id, member_id, time_in, time_out, rsvp_at, arrived_at, members:member_id(first_name, last_name)")
     .eq("meeting_id", meeting_id)
     .order("time_in", { ascending: true });
 
@@ -56,18 +56,49 @@ export async function POST(req: Request, ctx: any) {
   }
 
   const action = String(body.action ?? "").toLowerCase();
-  if (action !== "arrive" && action !== "clear") {
-    return NextResponse.json({ error: "action must be 'arrive' or 'clear'" }, { status: 400 });
+  const validActions = ["arrive", "clear", "rsvp", "early_arrive", "official"];
+  if (!validActions.includes(action)) {
+    return NextResponse.json({ error: "action must be arrive, clear, rsvp, early_arrive, or official" }, { status: 400 });
   }
 
-  // Block check-in if meeting hasn't started or has already ended
+  // Fetch meeting config
+  const { data: mtg } = await supabaseDb
+    .from("meetings")
+    .select("start_dt, end_dt, allow_rsvp, allow_early_checkin, early_checkin_minutes")
+    .eq("id", meeting_id)
+    .single();
+
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  if (action === "rsvp") {
+    if (!mtg?.allow_rsvp) {
+      return NextResponse.json({ error: "RSVP is not enabled for this meeting" }, { status: 400 });
+    }
+  }
+
+  if (action === "early_arrive") {
+    if (!mtg?.allow_early_checkin) {
+      return NextResponse.json({ error: "Early check-in is not enabled for this meeting" }, { status: 400 });
+    }
+    if (!mtg?.early_checkin_minutes || !mtg?.start_dt) {
+      return NextResponse.json({ error: "Early check-in window not configured" }, { status: 400 });
+    }
+    const startTime = new Date(mtg.start_dt);
+    const windowMs = mtg.early_checkin_minutes * 60 * 1000;
+    const windowOpenAt = new Date(startTime.getTime() - windowMs);
+    if (now < windowOpenAt) {
+      return NextResponse.json({ error: `Early check-in window opens ${mtg.early_checkin_minutes} minutes before start` }, { status: 400 });
+    }
+    if (now >= startTime) {
+      return NextResponse.json({ error: "Meeting has already started; use regular check-in" }, { status: 400 });
+    }
+    if (mtg.end_dt && now >= new Date(mtg.end_dt)) {
+      return NextResponse.json({ error: "Meeting is already closed" }, { status: 400 });
+    }
+  }
+
   if (action === "arrive") {
-    const { data: mtg } = await supabaseDb
-      .from("meetings")
-      .select("start_dt, end_dt")
-      .eq("id", meeting_id)
-      .single();
-    const now = new Date();
     if (mtg?.start_dt && new Date(mtg.start_dt) > now) {
       return NextResponse.json({ error: "Meeting hasn't started yet" }, { status: 400 });
     }
@@ -76,12 +107,34 @@ export async function POST(req: Request, ctx: any) {
     }
   }
 
+  if (action === "official") {
+    if (!auth.permissions.includes("manage_meetings")) {
+      return NextResponse.json({ error: "Permission denied: requires 'manage_meetings'" }, { status: 403 });
+    }
+    // Bulk set time_in = start_dt for all arrived members with no time_in
+    const timeIn = mtg?.start_dt ? mtg.start_dt : nowIso;
+    const { error } = await supabaseDb
+      .from("meeting_attendance")
+      .update({ time_in: timeIn })
+      .eq("meeting_id", meeting_id)
+      .not("arrived_at", "is", null)
+      .is("time_in", null);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const { data, error: fetchErr } = await supabaseDb
+      .from("meeting_attendance")
+      .select("*")
+      .eq("meeting_id", meeting_id)
+      .order("created_at", { ascending: true });
+    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+    return NextResponse.json(data ?? []);
+  }
+
   const checkin_override_note = body.checkin_override_note ? String(body.checkin_override_note) : undefined;
-  const nowIso = new Date().toISOString();
 
   const { data: existing } = await supabaseDb
     .from("meeting_attendance")
-    .select("id, time_in, time_out")
+    .select("id, time_in, time_out, rsvp_at, arrived_at")
     .eq("meeting_id", meeting_id)
     .eq("member_id", member_id)
     .maybeSingle();
@@ -89,7 +142,11 @@ export async function POST(req: Request, ctx: any) {
   const payload: Record<string, unknown> = {};
   if (checkin_override_note) payload.checkin_override_note = checkin_override_note;
 
-  if (action === "arrive") {
+  if (action === "rsvp") {
+    if (!existing?.rsvp_at) payload.rsvp_at = nowIso;
+  } else if (action === "early_arrive") {
+    if (!existing?.arrived_at) payload.arrived_at = nowIso;
+  } else if (action === "arrive") {
     if (!existing?.time_in) payload.time_in = nowIso;
   } else if (action === "clear") {
     if (!existing?.time_out) payload.time_out = nowIso;

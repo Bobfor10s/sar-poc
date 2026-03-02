@@ -20,6 +20,9 @@ type TrainingSession = {
   incident_lat?: number | null;
   incident_lng?: number | null;
   incident_radius_m?: number | null;
+  allow_rsvp?: boolean;
+  allow_early_checkin?: boolean;
+  early_checkin_minutes?: number | null;
 };
 
 type AttendanceRow = {
@@ -29,6 +32,10 @@ type AttendanceRow = {
   status: string;
   hours?: number | null;
   notes?: string | null;
+  rsvp_at?: string | null;
+  arrived_at?: string | null;
+  time_in?: string | null;
+  time_out?: string | null;
   created_at: string;
   members?: { first_name: string; last_name: string } | null;
 };
@@ -671,6 +678,31 @@ export default function TrainingDetailPage() {
           </div>
         </div>
 
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", border: "1px solid #e5e5e5", borderRadius: 8, background: "#fafafa" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>Attendance Options</div>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: canEdit ? "pointer" : "default" }}>
+            <input type="checkbox" checked={!!editSession.allow_rsvp} onChange={(e) => canEdit && setEditSession({ ...editSession, allow_rsvp: e.target.checked })} disabled={!canEdit} />
+            Allow RSVP
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: canEdit ? "pointer" : "default" }}>
+            <input type="checkbox" checked={!!editSession.allow_early_checkin} onChange={(e) => canEdit && setEditSession({ ...editSession, allow_early_checkin: e.target.checked, early_checkin_minutes: e.target.checked ? (editSession.early_checkin_minutes ?? 30) : null })} disabled={!canEdit} />
+            Allow Early Check-In
+          </label>
+          {editSession.allow_early_checkin && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginLeft: 24 }}>
+              <input
+                type="number"
+                min={5}
+                style={{ ...inputStyle, width: 80 }}
+                value={editSession.early_checkin_minutes ?? ""}
+                onChange={(e) => canEdit && setEditSession({ ...editSession, early_checkin_minutes: e.target.value ? Number(e.target.value) : null })}
+                readOnly={!canEdit}
+              />
+              <span style={{ opacity: 0.7 }}>minutes before start</span>
+            </div>
+          )}
+        </div>
+
         <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center" }}>
           {canEdit && (
             <button type="button" onClick={saveSession} disabled={busy !== ""}>
@@ -683,7 +715,35 @@ export default function TrainingDetailPage() {
 
       {/* ── Attendance ── */}
       <section style={sectionStyle}>
-        <h2 style={h2}>Attendance <span style={muted}>({attendance.length})</span></h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+          <h2 style={{ ...h2, margin: 0 }}>Attendance <span style={muted}>({attendance.length})</span></h2>
+          {canEdit && attendance.some((a) => a.arrived_at && !a.time_in) && (
+            <button
+              type="button"
+              onClick={async () => {
+                setBusy("official");
+                try {
+                  const meRes = await fetch("/api/auth/me");
+                  const me = await meRes.json().catch(() => ({}));
+                  const res = await fetch("/api/training-attendance", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ training_session_id: sessionId, member_id: me?.user?.id ?? "", action: "official", status: "attended" }),
+                  });
+                  if (res.ok) {
+                    const json = await res.json().catch(() => ({}));
+                    setAttendance(asArray<AttendanceRow>(json));
+                  }
+                } catch { /* ignore */ }
+                setBusy("");
+              }}
+              disabled={busy !== ""}
+              style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid #f59e0b", background: "#fffbeb", color: "#92400e", fontWeight: 600, cursor: "pointer" }}
+            >
+              Officially Check In All Arrived
+            </button>
+          )}
+        </div>
         {canEdit && (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <select value={attMemberId} onChange={(e) => setAttMemberId(e.target.value)} style={inputStyle}>
@@ -706,11 +766,16 @@ export default function TrainingDetailPage() {
               const m = a.members;
               const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
               const memberSignoffs = signoffsByMember.get(a.member_id) ?? [];
+              let phase = a.status;
+              if (a.time_out) phase = "Checked Out";
+              else if (a.time_in) phase = "Checked In";
+              else if (a.arrived_at) phase = "Arrived";
+              else if (a.rsvp_at) phase = "RSVP'd";
               return (
                 <li key={a.id} style={{ padding: "8px 0", borderBottom: "1px solid #f0f0f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <strong>{name}</strong>
-                    <span style={{ ...muted, marginLeft: 10 }}>{a.status}</span>
+                    <span style={{ ...muted, marginLeft: 10 }}>{phase}</span>
                     {memberSignoffs.length > 0 ? (
                       <span style={{ ...muted, marginLeft: 10 }}>
                         {memberSignoffs.length} skill use{memberSignoffs.length !== 1 ? "s" : ""} logged

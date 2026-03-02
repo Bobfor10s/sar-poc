@@ -19,7 +19,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabaseDb
     .from("training_attendance")
-    .select("id, training_session_id, member_id, status, hours, notes, created_at, members:member_id(first_name, last_name)")
+    .select("id, training_session_id, member_id, status, hours, notes, rsvp_at, arrived_at, time_in, time_out, created_at, members:member_id(first_name, last_name)")
     .eq("training_session_id", training_session_id)
     .order("created_at", { ascending: true });
 
@@ -30,6 +30,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const check = await requireAuth();
   if (!check.ok) return check.response;
+  const { auth } = check;
 
   const body = await req.json().catch(() => ({}));
   const training_session_id = String(body.training_session_id ?? "").trim();
@@ -49,7 +50,108 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "status must be attended|absent|excused" }, { status: 400 });
   }
 
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+
+  // For phase actions (rsvp, early_arrive, official), fetch training session config
+  if (action === "rsvp" || action === "early_arrive" || action === "official") {
+    const { data: ts } = await supabaseDb
+      .from("training_sessions")
+      .select("start_dt, end_dt, allow_rsvp, allow_early_checkin, early_checkin_minutes")
+      .eq("id", training_session_id)
+      .single();
+
+    if (action === "rsvp") {
+      if (!ts?.allow_rsvp) {
+        return NextResponse.json({ error: "RSVP is not enabled for this training session" }, { status: 400 });
+      }
+      const { data: existing } = await supabaseDb
+        .from("training_attendance")
+        .select("id, rsvp_at")
+        .eq("training_session_id", training_session_id)
+        .eq("member_id", member_id)
+        .maybeSingle();
+
+      if (existing?.id) {
+        if (!existing.rsvp_at) {
+          await supabaseDb.from("training_attendance").update({ rsvp_at: nowIso }).eq("id", existing.id);
+        }
+      } else {
+        await supabaseDb.from("training_attendance").insert({ training_session_id, member_id, status, rsvp_at: nowIso });
+      }
+
+      const { data, error } = await supabaseDb
+        .from("training_attendance")
+        .select("id, training_session_id, member_id, status, hours, notes, rsvp_at, arrived_at, time_in, time_out, created_at, members:member_id(first_name, last_name)")
+        .eq("training_session_id", training_session_id)
+        .order("created_at", { ascending: true });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ data }, { status: 201 });
+    }
+
+    if (action === "early_arrive") {
+      if (!ts?.allow_early_checkin) {
+        return NextResponse.json({ error: "Early check-in is not enabled for this training session" }, { status: 400 });
+      }
+      if (!ts?.early_checkin_minutes || !ts?.start_dt) {
+        return NextResponse.json({ error: "Early check-in window not configured" }, { status: 400 });
+      }
+      const startTime = new Date(ts.start_dt);
+      const windowMs = ts.early_checkin_minutes * 60 * 1000;
+      const windowOpenAt = new Date(startTime.getTime() - windowMs);
+      if (now < windowOpenAt) {
+        return NextResponse.json({ error: `Early check-in window opens ${ts.early_checkin_minutes} minutes before start` }, { status: 400 });
+      }
+      if (now >= startTime) {
+        return NextResponse.json({ error: "Training has already started; use regular check-in" }, { status: 400 });
+      }
+
+      const { data: existing } = await supabaseDb
+        .from("training_attendance")
+        .select("id, arrived_at")
+        .eq("training_session_id", training_session_id)
+        .eq("member_id", member_id)
+        .maybeSingle();
+
+      if (existing?.id) {
+        if (!existing.arrived_at) {
+          await supabaseDb.from("training_attendance").update({ arrived_at: nowIso, status }).eq("id", existing.id);
+        }
+      } else {
+        await supabaseDb.from("training_attendance").insert({ training_session_id, member_id, status, arrived_at: nowIso });
+      }
+
+      const { data, error } = await supabaseDb
+        .from("training_attendance")
+        .select("id, training_session_id, member_id, status, hours, notes, rsvp_at, arrived_at, time_in, time_out, created_at, members:member_id(first_name, last_name)")
+        .eq("training_session_id", training_session_id)
+        .order("created_at", { ascending: true });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ data }, { status: 201 });
+    }
+
+    if (action === "official") {
+      if (!auth.permissions.includes("manage_training")) {
+        return NextResponse.json({ error: "Permission denied: requires 'manage_training'" }, { status: 403 });
+      }
+      const timeIn = ts?.start_dt ? ts.start_dt : nowIso;
+      await supabaseDb
+        .from("training_attendance")
+        .update({ time_in: timeIn, status: "attended" })
+        .eq("training_session_id", training_session_id)
+        .not("arrived_at", "is", null)
+        .is("time_in", null);
+
+      const { data, error } = await supabaseDb
+        .from("training_attendance")
+        .select("id, training_session_id, member_id, status, hours, notes, rsvp_at, arrived_at, time_in, time_out, created_at, members:member_id(first_name, last_name)")
+        .eq("training_session_id", training_session_id)
+        .order("created_at", { ascending: true });
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ data }, { status: 201 });
+    }
+  }
+
   const payload: any = {
     training_session_id,
     member_id,
@@ -59,20 +161,20 @@ export async function POST(req: Request) {
   };
 
   if (action === "arrive") {
-    payload.time_in = now;
+    payload.time_in = nowIso;
     payload.time_out = null;
   } else if (action === "clear") {
-    payload.time_out = now;
+    payload.time_out = nowIso;
   } else if (!action) {
     // Legacy: no action field — just set time_in if not clearing
-    payload.time_in = now;
+    payload.time_in = nowIso;
   }
 
   // Upsert on unique (training_session_id, member_id)
   const { data, error } = await supabaseDb
     .from("training_attendance")
     .upsert(payload, { onConflict: "training_session_id,member_id" })
-    .select("id, training_session_id, member_id, status, hours, notes, time_in, time_out, created_at, members:member_id(first_name, last_name)")
+    .select("id, training_session_id, member_id, status, hours, notes, rsvp_at, arrived_at, time_in, time_out, created_at, members:member_id(first_name, last_name)")
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

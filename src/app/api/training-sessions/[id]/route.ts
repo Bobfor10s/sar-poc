@@ -69,6 +69,15 @@ export async function PATCH(req: Request, ctx: any) {
   if (body.incident_lng !== undefined) patch.incident_lng = body.incident_lng != null && body.incident_lng !== "" ? Number(body.incident_lng) : null;
   if (body.incident_radius_m !== undefined) patch.incident_radius_m = body.incident_radius_m != null && body.incident_radius_m !== "" ? Number(body.incident_radius_m) : null;
 
+  if (body.allow_rsvp !== undefined) patch.allow_rsvp = !!body.allow_rsvp;
+  if (body.allow_early_checkin !== undefined) {
+    patch.allow_early_checkin = !!body.allow_early_checkin;
+    if (!body.allow_early_checkin) patch.early_checkin_minutes = null;
+  }
+  if (body.early_checkin_minutes !== undefined && patch.allow_early_checkin !== false) {
+    patch.early_checkin_minutes = body.early_checkin_minutes != null ? Number(body.early_checkin_minutes) : null;
+  }
+
   const { data, error } = await supabaseDb.from("training_sessions").update(patch).eq("id", id).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data });

@@ -10,7 +10,11 @@ type ActiveEvent = {
   incident_lat: number | null;
   incident_lng: number | null;
   incident_radius_m: number | null;
-  my_attendance: { time_in: string | null; time_out: string | null } | null;
+  allow_rsvp: boolean;
+  allow_early_checkin: boolean;
+  early_checkin_minutes: number | null;
+  start_dt: string | null;
+  my_attendance: { time_in: string | null; time_out: string | null; rsvp_at?: string | null; arrived_at?: string | null } | null;
 };
 
 type UpcomingItem = {
@@ -19,6 +23,11 @@ type UpcomingItem = {
   title: string | null;
   start_dt: string | null;
   location_text: string | null;
+  allow_rsvp: boolean;
+  allow_early_checkin: boolean;
+  early_checkin_minutes: number | null;
+  my_rsvp_at: string | null;
+  my_arrived_at: string | null;
 };
 
 type HistoryItem = {
@@ -85,7 +94,14 @@ function fmtDt(v?: string | null) {
 function attendanceEndpoint(ev: ActiveEvent) {
   if (ev.type === "call") return `/api/calls/${ev.id}/attendance`;
   if (ev.type === "meeting") return `/api/meetings/${ev.id}/attendance`;
-  return `/api/events/${ev.id}/attendance`;
+  if (ev.type === "event") return `/api/events/${ev.id}/attendance`;
+  return null; // training handled separately
+}
+
+function upcomingAttendanceEndpoint(item: UpcomingItem) {
+  if (item.type === "meeting") return `/api/meetings/${item.id}/attendance`;
+  if (item.type === "event") return `/api/events/${item.id}/attendance`;
+  return null; // training
 }
 
 export default function PortalPage() {
@@ -174,7 +190,7 @@ export default function PortalPage() {
         const endpoint = attendanceEndpoint(ev);
         const body: Record<string, unknown> = { action, member_id };
         if (overrideNoteText) body.checkin_override_note = overrideNoteText;
-        res = await fetch(endpoint, {
+        res = await fetch(endpoint!, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -191,6 +207,44 @@ export default function PortalPage() {
       setMsg(ev.id, e?.message ?? "Error");
     } finally {
       setBusy((prev) => ({ ...prev, [ev.id]: false }));
+    }
+  }
+
+  async function doPhaseAction(item: UpcomingItem, action: "rsvp" | "early_arrive") {
+    const key = `upcoming-${item.id}`;
+    setBusy((prev) => ({ ...prev, [key]: true }));
+    setMsg(key, "");
+    try {
+      const meRes = await fetch("/api/auth/me");
+      const me = await meRes.json().catch(() => ({}));
+      const member_id = me?.user?.id;
+
+      let res: Response;
+      if (item.type === "training") {
+        res = await fetch("/api/training-attendance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ training_session_id: item.id, member_id, action, status: "attended" }),
+        });
+      } else {
+        const endpoint = upcomingAttendanceEndpoint(item);
+        res = await fetch(endpoint!, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, member_id }),
+        });
+      }
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? `${action} failed`);
+
+      // Refresh upcoming activities
+      const upcomingRes = await fetch("/api/upcoming-activities");
+      if (upcomingRes.ok) setUpcoming(await upcomingRes.json().catch(() => []));
+    } catch (e: any) {
+      setMsg(key, e?.message ?? "Error");
+    } finally {
+      setBusy((prev) => ({ ...prev, [key]: false }));
     }
   }
 
@@ -291,9 +345,10 @@ export default function PortalPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {events.map((ev) => {
               const att = ev.my_attendance;
+              const preArrived = att && att.arrived_at && !att.time_in;
               const checkedIn = att && att.time_in && !att.time_out;
               const clearedOut = att && att.time_in && att.time_out;
-              const notIn = !att || !att.time_in;
+              const notIn = !att || (!att.time_in && !att.arrived_at);
               const msg = cardMsg[ev.id] ?? "";
               const isShowOverride = showOverride[ev.id] ?? false;
               const isBusy = busy[ev.id] ?? false;
@@ -360,7 +415,12 @@ export default function PortalPage() {
                     </div>
                   )}
 
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {preArrived && (
+                      <span style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #fbbf24", background: "#fef9c3", color: "#92400e", fontWeight: 600, fontSize: 13 }}>
+                        Pre-Arrived — awaiting official check-in
+                      </span>
+                    )}
                     {notIn && !isShowOverride && (
                       <button
                         onClick={() => handleCheckin(ev, "arrive")}
@@ -426,30 +486,81 @@ export default function PortalPage() {
         <section style={{ marginTop: 32 }}>
           <h2 style={{ fontSize: 18, marginBottom: 12 }}>Scheduled</h2>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {upcoming.map((item) => (
-              <div
-                key={`${item.type}-${item.id}`}
-                style={{
-                  padding: "10px 14px",
-                  border: "1px solid #e5e5e5",
-                  borderRadius: 10,
-                  background: "#fff",
-                  display: "flex",
-                  gap: 10,
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                }}
-              >
-                <span style={typeBadgeStyle(item.type)}>{typeLabel(item.type)}</span>
-                <strong style={{ fontSize: 14 }}>{item.title ?? "(Untitled)"}</strong>
-                {item.start_dt && (
-                  <span style={{ fontSize: 12, opacity: 0.65 }}>{fmtDt(item.start_dt)}</span>
-                )}
-                {item.location_text && (
-                  <span style={{ fontSize: 12, opacity: 0.65 }}>• {item.location_text}</span>
-                )}
-              </div>
-            ))}
+            {upcoming.map((item) => {
+              const key = `upcoming-${item.id}`;
+              const isBusy = busy[key] ?? false;
+              const errMsg = cardMsg[key] ?? "";
+              const now = new Date();
+              const startDt = item.start_dt ? new Date(item.start_dt) : null;
+              const withinEarlyWindow =
+                item.allow_early_checkin &&
+                item.early_checkin_minutes != null &&
+                startDt != null &&
+                now >= new Date(startDt.getTime() - item.early_checkin_minutes * 60 * 1000) &&
+                now < startDt;
+
+              return (
+                <div
+                  key={key}
+                  style={{
+                    padding: "10px 14px",
+                    border: `1px solid ${item.my_rsvp_at ? "#86efac" : "#e5e5e5"}`,
+                    borderRadius: 10,
+                    background: item.my_rsvp_at ? "#f0fdf4" : "#fff",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={typeBadgeStyle(item.type)}>{typeLabel(item.type)}</span>
+                    <strong style={{ fontSize: 14 }}>{item.title ?? "(Untitled)"}</strong>
+                    {item.start_dt && (
+                      <span style={{ fontSize: 12, opacity: 0.65 }}>{fmtDt(item.start_dt)}</span>
+                    )}
+                    {item.location_text && (
+                      <span style={{ fontSize: 12, opacity: 0.65 }}>• {item.location_text}</span>
+                    )}
+                  </div>
+
+                  {errMsg && (
+                    <div style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>{errMsg}</div>
+                  )}
+
+                  {(item.allow_rsvp || withinEarlyWindow) && (
+                    <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                      {item.allow_rsvp && (
+                        item.my_rsvp_at ? (
+                          <span style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, background: "#dcfce7", border: "1px solid #86efac", color: "#15803d", fontWeight: 600 }}>
+                            RSVP'd ✓
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => doPhaseAction(item, "rsvp")}
+                            disabled={isBusy}
+                            style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid #22c55e", background: "#f0fdf4", color: "#15803d", fontWeight: 600, cursor: "pointer" }}
+                          >
+                            {isBusy ? "…" : "RSVP"}
+                          </button>
+                        )
+                      )}
+                      {withinEarlyWindow && (
+                        item.my_arrived_at ? (
+                          <span style={{ fontSize: 12, padding: "4px 10px", borderRadius: 6, background: "#fef9c3", border: "1px solid #fbbf24", color: "#92400e", fontWeight: 600 }}>
+                            Arrived ✓ — awaiting official check-in
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => doPhaseAction(item, "early_arrive")}
+                            disabled={isBusy}
+                            style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid #f59e0b", background: "#fffbeb", color: "#92400e", fontWeight: 600, cursor: "pointer" }}
+                          >
+                            {isBusy ? "…" : "I've Arrived"}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}

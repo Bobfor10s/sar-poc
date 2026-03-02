@@ -33,6 +33,9 @@ export default function NewEventPage() {
     incident_lat: "",
     incident_lng: "",
     incident_radius_m: "500",
+    allow_rsvp: false,
+    allow_early_checkin: false,
+    early_checkin_minutes: "30",
   });
 
   function useMyLocation() {
@@ -71,6 +74,9 @@ export default function NewEventPage() {
         incident_lat: form.incident_lat.trim() ? Number(form.incident_lat) : null,
         incident_lng: form.incident_lng.trim() ? Number(form.incident_lng) : null,
         incident_radius_m: form.incident_radius_m.trim() ? Number(form.incident_radius_m) : null,
+        allow_rsvp: form.allow_rsvp,
+        allow_early_checkin: form.allow_early_checkin,
+        early_checkin_minutes: form.allow_early_checkin && form.early_checkin_minutes ? Number(form.early_checkin_minutes) : null,
       }),
     });
 
@@ -182,6 +188,30 @@ export default function NewEventPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 8, padding: "12px 14px", border: "1px solid #e5e5e5", borderRadius: 8, background: "#fafafa" }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>Attendance Options</div>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={form.allow_rsvp} onChange={(e) => setForm({ ...form, allow_rsvp: e.target.checked })} />
+            Allow RSVP
+          </label>
+          <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={form.allow_early_checkin} onChange={(e) => setForm({ ...form, allow_early_checkin: e.target.checked })} />
+            Allow Early Check-In
+          </label>
+          {form.allow_early_checkin && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginLeft: 24 }}>
+              <input
+                type="number"
+                min={5}
+                style={{ ...inputStyle, width: 80 }}
+                value={form.early_checkin_minutes}
+                onChange={(e) => setForm({ ...form, early_checkin_minutes: e.target.value })}
+              />
+              <span style={{ opacity: 0.7 }}>minutes before start</span>
+            </div>
+          )}
         </div>
 
         {error && (

@@ -80,6 +80,15 @@ export async function PATCH(req: Request, ctx: any) {
   if (body.incident_lng !== undefined) payload.incident_lng = body.incident_lng != null && body.incident_lng !== "" ? Number(body.incident_lng) : null;
   if (body.incident_radius_m !== undefined) payload.incident_radius_m = body.incident_radius_m != null && body.incident_radius_m !== "" ? Number(body.incident_radius_m) : null;
 
+  if (body.allow_rsvp !== undefined) payload.allow_rsvp = !!body.allow_rsvp;
+  if (body.allow_early_checkin !== undefined) {
+    payload.allow_early_checkin = !!body.allow_early_checkin;
+    if (!body.allow_early_checkin) payload.early_checkin_minutes = null;
+  }
+  if (body.early_checkin_minutes !== undefined && payload.allow_early_checkin !== false) {
+    payload.early_checkin_minutes = body.early_checkin_minutes != null ? Number(body.early_checkin_minutes) : null;
+  }
+
   const { data, error } = await supabaseDb
     .from("meetings")
     .update(payload)

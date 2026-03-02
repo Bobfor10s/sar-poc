@@ -38,6 +38,9 @@ export async function POST(req: Request) {
     incident_lat: body.incident_lat != null && body.incident_lat !== "" ? Number(body.incident_lat) : null,
     incident_lng: body.incident_lng != null && body.incident_lng !== "" ? Number(body.incident_lng) : null,
     incident_radius_m: body.incident_radius_m != null && body.incident_radius_m !== "" ? Number(body.incident_radius_m) : null,
+    allow_rsvp: !!body.allow_rsvp,
+    allow_early_checkin: !!body.allow_early_checkin,
+    early_checkin_minutes: body.allow_early_checkin && body.early_checkin_minutes != null ? Number(body.early_checkin_minutes) : null,
   };
 
   const { data, error } = await supabaseDb

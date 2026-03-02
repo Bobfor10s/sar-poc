@@ -8,6 +8,8 @@ type AttendanceRow = {
   member_id: string;
   time_in: string | null;
   time_out: string | null;
+  rsvp_at: string | null;
+  arrived_at: string | null;
   members: { first_name: string; last_name: string } | null;
 };
 
@@ -21,6 +23,9 @@ type Meeting = {
   notes?: string | null;
   status?: string | null;
   created_at?: string | null;
+  allow_rsvp?: boolean;
+  allow_early_checkin?: boolean;
+  early_checkin_minutes?: number | null;
 };
 
 function computeStatus(m: Meeting): "scheduled" | "open" | "closed" {
@@ -130,6 +135,9 @@ export default function MeetingDetailPage() {
         notes: meeting.notes ?? null,
         start_dt: localInputToIso(startLocal),
         end_dt: endLocal ? localInputToIso(endLocal) : null,
+        allow_rsvp: !!meeting.allow_rsvp,
+        allow_early_checkin: !!meeting.allow_early_checkin,
+        early_checkin_minutes: meeting.allow_early_checkin ? (meeting.early_checkin_minutes ?? null) : null,
       }),
     });
     const json = await res.json().catch(() => ({}));
@@ -251,6 +259,31 @@ export default function MeetingDetailPage() {
                   <input style={inputStyle} value={meeting.notes ?? ""} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} placeholder="Short notes" readOnly={!canEdit} />
                 </Field>
               </div>
+
+              <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 8, padding: "10px 12px", border: "1px solid #e5e5e5", borderRadius: 8, background: "#fafafa" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, opacity: 0.7 }}>Attendance Options</div>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: canEdit ? "pointer" : "default" }}>
+                  <input type="checkbox" checked={!!meeting.allow_rsvp} onChange={(e) => canEdit && setMeeting({ ...meeting, allow_rsvp: e.target.checked })} disabled={!canEdit} />
+                  Allow RSVP
+                </label>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, cursor: canEdit ? "pointer" : "default" }}>
+                  <input type="checkbox" checked={!!meeting.allow_early_checkin} onChange={(e) => canEdit && setMeeting({ ...meeting, allow_early_checkin: e.target.checked, early_checkin_minutes: e.target.checked ? (meeting.early_checkin_minutes ?? 30) : null })} disabled={!canEdit} />
+                  Allow Early Check-In
+                </label>
+                {meeting.allow_early_checkin && (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, marginLeft: 24 }}>
+                    <input
+                      type="number"
+                      min={5}
+                      style={{ ...inputStyle, width: 80 }}
+                      value={meeting.early_checkin_minutes ?? ""}
+                      onChange={(e) => canEdit && setMeeting({ ...meeting, early_checkin_minutes: e.target.value ? Number(e.target.value) : null })}
+                      readOnly={!canEdit}
+                    />
+                    <span style={{ opacity: 0.7 }}>minutes before start</span>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
@@ -272,7 +305,34 @@ export default function MeetingDetailPage() {
 
           {/* Attendance list */}
           <section style={{ ...sectionStyle, marginTop: 16 }}>
-            <h2 style={h2}>Attendance ({attendance.length})</h2>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+              <h2 style={{ ...h2, margin: 0 }}>Attendance ({attendance.length})</h2>
+              {canEdit && attendance.some((a) => a.arrived_at && !a.time_in) && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setBusy(true);
+                    const meRes = await fetch("/api/auth/me");
+                    const me = await meRes.json().catch(() => ({}));
+                    const member_id = me?.user?.id ?? "";
+                    const res = await fetch(`/api/meetings/${meeting!.id}/attendance`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ action: "official", member_id }),
+                    });
+                    if (res.ok) {
+                      const updated = await res.json().catch(() => []);
+                      setAttendance(updated);
+                    }
+                    setBusy(false);
+                  }}
+                  disabled={busy}
+                  style={{ fontSize: 12, padding: "4px 12px", borderRadius: 6, border: "1px solid #f59e0b", background: "#fffbeb", color: "#92400e", fontWeight: 600, cursor: "pointer" }}
+                >
+                  Officially Check In All Arrived
+                </button>
+              )}
+            </div>
             {attendance.length === 0 ? (
               <p style={{ margin: 0, fontSize: 13, opacity: 0.65 }}>No check-ins yet.</p>
             ) : (
@@ -280,6 +340,7 @@ export default function MeetingDetailPage() {
                 <thead>
                   <tr>
                     <th style={thStyle}>Member</th>
+                    <th style={thStyle}>Phase</th>
                     <th style={thStyle}>Time In</th>
                     <th style={thStyle}>Time Out</th>
                   </tr>
@@ -289,9 +350,15 @@ export default function MeetingDetailPage() {
                     const name = a.members
                       ? `${a.members.last_name}, ${a.members.first_name}`
                       : a.member_id;
+                    let phase = "—";
+                    if (a.time_out) phase = "Checked Out";
+                    else if (a.time_in) phase = "Checked In";
+                    else if (a.arrived_at) phase = "Arrived";
+                    else if (a.rsvp_at) phase = "RSVP'd";
                     return (
                       <tr key={a.id}>
                         <td style={tdStyle}>{name}</td>
+                        <td style={tdStyle}>{phase}</td>
                         <td style={tdStyle}>{a.time_in ? new Date(a.time_in).toLocaleTimeString() : "—"}</td>
                         <td style={tdStyle}>{a.time_out ? new Date(a.time_out).toLocaleTimeString() : "—"}</td>
                       </tr>
