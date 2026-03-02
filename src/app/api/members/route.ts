@@ -168,5 +168,16 @@ export async function POST(req: Request) {
     });
   }
 
+  // Auto-create Supabase Auth user with temp password "welcome"
+  const { data: authData, error: authError } = await supabaseDb.auth.admin.createUser({
+    email,
+    password: "welcome",
+    email_confirm: true,
+  });
+  if (!authError && authData?.user?.id) {
+    await supabaseDb.from("members").update({ user_id: authData.user.id }).eq("id", data.id);
+    data.user_id = authData.user.id;
+  }
+
   return NextResponse.json({ data }, { status: 201 });
 }
