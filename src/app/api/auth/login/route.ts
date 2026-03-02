@@ -22,12 +22,25 @@ export async function POST(req: Request) {
   // Fetch member row to get role and display name
   const { data: member } = await supabaseDb
     .from("members")
-    .select("role, first_name, last_name")
+    .select("id, role, first_name, last_name")
     .eq("user_id", data.user.id)
     .maybeSingle();
 
   const role = member?.role ?? "member";
   const name = member ? `${member.first_name} ${member.last_name}`.trim() : null;
+
+  // Write login log entry (fire-and-forget; don't fail login if this fails)
+  const ip =
+    (req as any).headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    (req as any).headers.get("x-real-ip") ??
+    null;
+  const ua = (req as any).headers.get("user-agent") ?? null;
+  supabaseDb.from("login_log").insert({
+    member_id: member?.id ?? null,
+    email,
+    ip_address: ip,
+    user_agent: ua,
+  }).then(() => {}).catch(() => {});
 
   const response = NextResponse.json({ ok: true, role, name, user: data.user });
   response.cookies.set("sar-role", role, { httpOnly: true, sameSite: "lax", path: "/" });
