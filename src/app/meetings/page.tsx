@@ -9,6 +9,7 @@ type MeetingRow = {
   start_dt?: string | null;
   end_dt?: string | null;
   location_text?: string | null;
+  agenda?: string | null;
   status?: string | null;
   is_test?: boolean | null;
 };
@@ -129,12 +130,25 @@ export default function MeetingsPage() {
                 }}
               >
                 <Link href={`/meetings/${m.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ fontSize: 13, opacity: 0.75, minWidth: 140 }}>
                       {m.start_dt ? fmtDate(m.start_dt) : "—"}
                     </div>
-                    <div style={{ fontWeight: 600, flex: 1 }}>{m.title}</div>
-                    {m.location_text ? <div style={{ fontSize: 13, opacity: 0.7 }}>{m.location_text}</div> : null}
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontWeight: 600 }}>{m.title}</div>
+                      {m.location_text && (
+                        <div style={{ marginTop: 3 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Location</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{m.location_text}</span>
+                        </div>
+                      )}
+                      {m.agenda && (
+                        <div style={{ marginTop: 2 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Agenda</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{m.agenda}</span>
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <span style={chipStyle(status)}>{status}</span>
                       {m.is_test ? (
