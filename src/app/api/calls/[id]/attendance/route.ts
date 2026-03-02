@@ -105,8 +105,9 @@ export async function POST(req: Request, ctx: any) {
   if (requested_time_in) {
     payload.time_in = requested_time_in;
   } else if (action === "arrive") {
-    // only set if not already set
-    if (!existing?.time_in) payload.time_in = nowIso;
+    // Always stamp time_in. If re-arriving after a checkout, also clear time_out.
+    payload.time_in = nowIso;
+    if (existing?.time_out) payload.time_out = null;
   }
 
   if (requested_time_out) {
@@ -117,8 +118,8 @@ export async function POST(req: Request, ctx: any) {
   }
 
   if (action === "on_my_way") {
-    // only set if not already set
-    if (!(existing as any)?.on_my_way_at) payload.on_my_way_at = nowIso;
+    // Always reset — member may be going en-route again after a prior checkout
+    payload.on_my_way_at = nowIso;
   }
 
   // 3) Insert or update

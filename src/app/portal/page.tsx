@@ -470,11 +470,19 @@ export default function PortalPage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {events.map((ev) => {
               const att = ev.my_attendance;
+              const onMyWayMs = att?.on_my_way_at ? new Date(att.on_my_way_at).getTime() : 0;
+              const timeOutMs  = att?.time_out     ? new Date(att.time_out).getTime()     : 0;
+
               const preArrived = att && att.arrived_at && !att.time_in;
-              const checkedIn = att && att.time_in && !att.time_out;
-              const clearedOut = att && att.time_in && att.time_out;
-              const enRoute = ev.type === "call" && att && att.on_my_way_at && !att.time_in;
-              const notIn = !att || (!att.time_in && !att.arrived_at && !att.on_my_way_at);
+              const checkedIn  = att && att.time_in && !att.time_out;
+              // en-route: on_my_way_at set, AND (no time_in yet OR re-engaging after checkout)
+              const enRoute    = ev.type === "call" && att && att.on_my_way_at &&
+                                 (!att.time_in || (att.time_out && onMyWayMs > timeOutMs));
+              // cleared and not re-engaging
+              const clearedOut = att && att.time_in && att.time_out && !enRoute;
+              const notIn      = !att || (!att.time_in && !att.arrived_at && !att.on_my_way_at);
+              // for calls, also show engage buttons when cleared (multi-day re-engage)
+              const showEngage = notIn || (ev.type === "call" && !!clearedOut);
               const msg = cardMsg[ev.id] ?? "";
               const isShowOverride = showOverride[ev.id] ?? false;
               const isBusy = busy[ev.id] ?? false;
@@ -573,7 +581,7 @@ export default function PortalPage() {
                         </button>
                       </>
                     )}
-                    {notIn && !isShowOverride && (
+                    {showEngage && !isShowOverride && (
                       <>
                         {ev.type === "call" && (
                           <button
@@ -642,8 +650,13 @@ export default function PortalPage() {
                         </button>
                       </>
                     )}
-                    {clearedOut && (
+                    {clearedOut && ev.type !== "call" && (
                       <span style={{ fontSize: 13, opacity: 0.6 }}>Checked out</span>
+                    )}
+                    {clearedOut && ev.type === "call" && (
+                      <span style={{ fontSize: 12, opacity: 0.6 }}>
+                        Last: {fmtDt(att!.time_in)} → {fmtDt(att!.time_out)}
+                      </span>
                     )}
                   </div>
                 </div>
