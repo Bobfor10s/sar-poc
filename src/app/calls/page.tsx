@@ -8,6 +8,7 @@ type CallRow = {
   title?: string | null;
   start_dt?: string | null;
   status?: string | null;
+  summary?: string | null;
 };
 
 function fmtDate(v?: string | null) {
@@ -119,12 +120,18 @@ export default function CallsPage() {
                 }}
               >
                 <Link href={`/calls/${c.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ fontSize: 13, opacity: 0.75, minWidth: 140 }}>
                       {c.start_dt ? fmtDate(c.start_dt) : "—"}
                     </div>
-                    <div style={{ fontWeight: 600, flex: 1 }}>
-                      {c.title ?? "(Untitled)"}
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontWeight: 600 }}>{c.title ?? "(Untitled)"}</div>
+                      {c.summary && (
+                        <div style={{ marginTop: 3 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Summary</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{c.summary}</span>
+                        </div>
+                      )}
                     </div>
                     <div>
                       <span style={chipStyle(status)}>{status}</span>

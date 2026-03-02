@@ -123,13 +123,25 @@ export default function TrainingPage() {
                 }}
               >
                 <Link href={`/training/${r.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ fontSize: 13, opacity: 0.75, minWidth: 140 }}>
                       {r.start_dt ? fmtDate(r.start_dt) : "—"}
                     </div>
-                    <div style={{ fontWeight: 600, flex: 1 }}>{r.title}</div>
-                    {r.location_text ? <div style={{ fontSize: 13, opacity: 0.7 }}>{r.location_text}</div> : null}
-                    {r.instructor ? <div style={{ fontSize: 13, opacity: 0.7 }}>• {r.instructor}</div> : null}
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontWeight: 600 }}>{r.title}</div>
+                      {r.location_text && (
+                        <div style={{ marginTop: 3 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Location</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{r.location_text}</span>
+                        </div>
+                      )}
+                      {r.instructor && (
+                        <div style={{ marginTop: 2 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Instructor</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{r.instructor}</span>
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <span style={chipStyle(status)}>{statusLabel(status)}</span>
                       {r.is_test ? (
