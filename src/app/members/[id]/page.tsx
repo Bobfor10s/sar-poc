@@ -768,27 +768,29 @@ export default function MemberDetailPage() {
 
           <h2>Certifications</h2>
 
-          <form onSubmit={addCertification} style={{ display: "grid", gap: 10, maxWidth: 560 }}>
-            <label style={{ fontSize: 13, fontWeight: 600 }}>Course</label>
-            <select value={certForm.course_id} onChange={(e) => setCertForm({ ...certForm, course_id: e.target.value })}>
-              <option value="">Select course…</option>
-              {courses.filter((c) => c.is_active).map((c) => (
-                <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
-              ))}
-            </select>
+          {authUser?.role !== "viewer" && (
+            <form onSubmit={addCertification} style={{ display: "grid", gap: 10, maxWidth: 560 }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>Course</label>
+              <select value={certForm.course_id} onChange={(e) => setCertForm({ ...certForm, course_id: e.target.value })}>
+                <option value="">Select course…</option>
+                {courses.filter((c) => c.is_active).map((c) => (
+                  <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
+                ))}
+              </select>
 
-            <label style={{ fontSize: 13, fontWeight: 600 }}>Completion date</label>
-            <input type="date" value={certForm.completed_at} onChange={(e) => setCertForm({ ...certForm, completed_at: e.target.value })} />
+              <label style={{ fontSize: 13, fontWeight: 600 }}>Completion date</label>
+              <input type="date" value={certForm.completed_at} onChange={(e) => setCertForm({ ...certForm, completed_at: e.target.value })} />
 
-            <div style={{ opacity: 0.85, fontSize: 13 }}>
-              Expires: <strong>{computedExpires || "—"}</strong>
-              {selectedCourse ? ` (valid ${selectedCourse.valid_months} months)` : ""}
-            </div>
+              <div style={{ opacity: 0.85, fontSize: 13 }}>
+                Expires: <strong>{computedExpires || "—"}</strong>
+                {selectedCourse ? ` (valid ${selectedCourse.valid_months} months)` : ""}
+              </div>
 
-            <button type="submit" disabled={busy || !certForm.course_id || !certForm.completed_at}>
-              Add Certification Record
-            </button>
-          </form>
+              <button type="submit" disabled={busy || !certForm.course_id || !certForm.completed_at}>
+                Add Certification Record
+              </button>
+            </form>
+          )}
 
           <h3 style={{ marginTop: 18 }}>History (Audit)</h3>
           {history.length === 0 ? (
@@ -807,27 +809,29 @@ export default function MemberDetailPage() {
 
           <h2>Positions</h2>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <select
-              value={selectedPositionId}
-              onChange={async (e) => {
-                const pid = e.target.value;
-                setSelectedPositionId(pid);
-                if (pid) await ensurePositionLoaded(pid);
-              }}
-            >
-              <option value="">Assign position…</option>
-              {positions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} — {p.name}
-                </option>
-              ))}
-            </select>
+          {authUser?.role !== "viewer" && (
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                value={selectedPositionId}
+                onChange={async (e) => {
+                  const pid = e.target.value;
+                  setSelectedPositionId(pid);
+                  if (pid) await ensurePositionLoaded(pid);
+                }}
+              >
+                <option value="">Assign position…</option>
+                {positions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} — {p.name}
+                  </option>
+                ))}
+              </select>
 
-            <button type="button" onClick={assignPosition} disabled={!selectedPositionId || busy}>
-              Assign (trainee)
-            </button>
-          </div>
+              <button type="button" onClick={assignPosition} disabled={!selectedPositionId || busy}>
+                Assign (trainee)
+              </button>
+            </div>
+          )}
 
           {/* External Skill — admin only */}
           {authUser?.permissions.includes("approve_positions") && (

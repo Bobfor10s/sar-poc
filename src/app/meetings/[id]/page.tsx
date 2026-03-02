@@ -227,28 +227,28 @@ export default function MeetingDetailPage() {
             <h2 style={h2}>Meeting Info</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Title">
-                <input style={inputStyle} value={meeting.title ?? ""} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} placeholder="Meeting title" />
+                <input style={inputStyle} value={meeting.title ?? ""} onChange={(e) => setMeeting({ ...meeting, title: e.target.value })} placeholder="Meeting title" readOnly={!canEdit} />
               </Field>
 
               <Field label="Start">
-                <input style={inputStyle} type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
+                <input style={inputStyle} type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} readOnly={!canEdit} />
               </Field>
 
               <Field label="End">
-                <input style={inputStyle} type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
+                <input style={inputStyle} type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} readOnly={!canEdit} />
               </Field>
 
               <Field label="Location">
-                <input style={inputStyle} value={meeting.location_text ?? ""} onChange={(e) => setMeeting({ ...meeting, location_text: e.target.value })} placeholder="Station / Firehouse / Zoom / etc." />
+                <input style={inputStyle} value={meeting.location_text ?? ""} onChange={(e) => setMeeting({ ...meeting, location_text: e.target.value })} placeholder="Station / Firehouse / Zoom / etc." readOnly={!canEdit} />
               </Field>
 
               <Field label="Agenda">
-                <input style={inputStyle} value={meeting.agenda ?? ""} onChange={(e) => setMeeting({ ...meeting, agenda: e.target.value })} placeholder="Short agenda" />
+                <input style={inputStyle} value={meeting.agenda ?? ""} onChange={(e) => setMeeting({ ...meeting, agenda: e.target.value })} placeholder="Short agenda" readOnly={!canEdit} />
               </Field>
 
               <div style={{ gridColumn: "1 / -1" }}>
                 <Field label="Notes">
-                  <input style={inputStyle} value={meeting.notes ?? ""} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} placeholder="Short notes" />
+                  <input style={inputStyle} value={meeting.notes ?? ""} onChange={(e) => setMeeting({ ...meeting, notes: e.target.value })} placeholder="Short notes" readOnly={!canEdit} />
                 </Field>
               </div>
             </div>

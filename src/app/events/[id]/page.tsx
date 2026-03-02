@@ -221,24 +221,24 @@ export default function EventDetailPage() {
             <h2 style={h2}>Event Info</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Title">
-                <input style={inputStyle} value={event.title ?? ""} onChange={(e) => setEvent({ ...event, title: e.target.value })} placeholder="Event title" />
+                <input style={inputStyle} value={event.title ?? ""} onChange={(e) => setEvent({ ...event, title: e.target.value })} placeholder="Event title" readOnly={!canEdit} />
               </Field>
 
               <Field label="Start">
-                <input style={inputStyle} type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} />
+                <input style={inputStyle} type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} readOnly={!canEdit} />
               </Field>
 
               <Field label="End">
-                <input style={inputStyle} type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} />
+                <input style={inputStyle} type="datetime-local" value={endLocal} onChange={(e) => setEndLocal(e.target.value)} readOnly={!canEdit} />
               </Field>
 
               <Field label="Location">
-                <input style={inputStyle} value={event.location_text ?? ""} onChange={(e) => setEvent({ ...event, location_text: e.target.value })} placeholder="Park / Venue / Town" />
+                <input style={inputStyle} value={event.location_text ?? ""} onChange={(e) => setEvent({ ...event, location_text: e.target.value })} placeholder="Park / Venue / Town" readOnly={!canEdit} />
               </Field>
 
               <div style={{ gridColumn: "1 / -1" }}>
                 <Field label="Description">
-                  <input style={inputStyle} value={event.description ?? ""} onChange={(e) => setEvent({ ...event, description: e.target.value })} placeholder="Short description" />
+                  <input style={inputStyle} value={event.description ?? ""} onChange={(e) => setEvent({ ...event, description: e.target.value })} placeholder="Short description" readOnly={!canEdit} />
                 </Field>
               </div>
             </div>

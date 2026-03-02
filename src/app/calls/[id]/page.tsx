@@ -381,7 +381,7 @@ export default function CallDetailPage() {
               >
                 {busy === "reload" ? "Refreshing…" : "Refresh"}
               </button>
-              {!isClosed && (
+              {!isClosed && canEdit && (
                 <button
                   type="button"
                   onClick={closeCall}
@@ -494,29 +494,31 @@ export default function CallDetailPage() {
             </h2>
 
             {/* Admin controls — available on both open and closed calls */}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-              <select
-                value={selectedMemberId}
-                onChange={(e) => setSelectedMemberId(e.target.value)}
-                style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
-              >
-                <option value="">Select member…</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.first_name} {m.last_name}
-                  </option>
-                ))}
-              </select>
-              <button onClick={() => postAttendance()} disabled={!selectedMemberId || busy !== ""} style={{ fontSize: 13 }}>
-                {busy === "add" ? "Adding…" : "Add"}
-              </button>
-              <button onClick={() => postAttendance("arrive")} disabled={!canArrive || busy !== ""} style={{ fontSize: 13 }}>
-                {busy === "arrive" ? "…" : "Mark Arrived"}
-              </button>
-              <button onClick={() => postAttendance("clear")} disabled={!canClear || busy !== ""} style={{ fontSize: 13 }}>
-                {busy === "clear" ? "…" : "Mark Cleared"}
-              </button>
-            </div>
+            {canEdit && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+                <select
+                  value={selectedMemberId}
+                  onChange={(e) => setSelectedMemberId(e.target.value)}
+                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 13 }}
+                >
+                  <option value="">Select member…</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.first_name} {m.last_name}
+                    </option>
+                  ))}
+                </select>
+                <button onClick={() => postAttendance()} disabled={!selectedMemberId || busy !== ""} style={{ fontSize: 13 }}>
+                  {busy === "add" ? "Adding…" : "Add"}
+                </button>
+                <button onClick={() => postAttendance("arrive")} disabled={!canArrive || busy !== ""} style={{ fontSize: 13 }}>
+                  {busy === "arrive" ? "…" : "Mark Arrived"}
+                </button>
+                <button onClick={() => postAttendance("clear")} disabled={!canClear || busy !== ""} style={{ fontSize: 13 }}>
+                  {busy === "clear" ? "…" : "Mark Cleared"}
+                </button>
+              </div>
+            )}
 
             {attendance.length === 0 ? (
               <p style={{ fontSize: 13, opacity: 0.65 }}>No attendance records yet.</p>
@@ -732,74 +734,76 @@ export default function CallDetailPage() {
               )}
 
               {/* Add sign-off form */}
-              <form onSubmit={addSignoff} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <select
-                  value={signoffForm.member_id}
-                  onChange={(e) => setSignoffForm((f) => ({ ...f, member_id: e.target.value }))}
-                  style={selectStyle}
-                  required
-                >
-                  <option value="">Select member…</option>
-                  {attendingMembers.map((a) => {
-                    const m = a.member;
-                    const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
-                    return <option key={a.member_id} value={a.member_id}>{name}</option>;
-                  })}
-                </select>
+              {canEdit && (
+                <form onSubmit={addSignoff} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select
+                    value={signoffForm.member_id}
+                    onChange={(e) => setSignoffForm((f) => ({ ...f, member_id: e.target.value }))}
+                    style={selectStyle}
+                    required
+                  >
+                    <option value="">Select member…</option>
+                    {attendingMembers.map((a) => {
+                      const m = a.member;
+                      const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
+                      return <option key={a.member_id} value={a.member_id}>{name}</option>;
+                    })}
+                  </select>
 
-                <select
-                  value={signoffForm.task_id}
-                  onChange={(e) => setSignoffForm((f) => ({ ...f, task_id: e.target.value }))}
-                  style={{ ...selectStyle, flex: 1, minWidth: 200 }}
-                  required
-                >
-                  <option value="">Select skill…</option>
-                  {tasks.map((t) => (
-                    <option key={t.id} value={t.id}>{t.task_code} — {t.task_name}</option>
-                  ))}
-                </select>
+                  <select
+                    value={signoffForm.task_id}
+                    onChange={(e) => setSignoffForm((f) => ({ ...f, task_id: e.target.value }))}
+                    style={{ ...selectStyle, flex: 1, minWidth: 200 }}
+                    required
+                  >
+                    <option value="">Select skill…</option>
+                    {tasks.map((t) => (
+                      <option key={t.id} value={t.id}>{t.task_code} — {t.task_name}</option>
+                    ))}
+                  </select>
 
-                <input
-                  placeholder="Evaluator (opt)"
-                  value={signoffForm.evaluator_name}
-                  onChange={(e) => setSignoffForm((f) => ({ ...f, evaluator_name: e.target.value }))}
-                  style={{ width: 140, ...selectStyle }}
-                />
+                  <input
+                    placeholder="Evaluator (opt)"
+                    value={signoffForm.evaluator_name}
+                    onChange={(e) => setSignoffForm((f) => ({ ...f, evaluator_name: e.target.value }))}
+                    style={{ width: 140, ...selectStyle }}
+                  />
 
-                <input
-                  placeholder="Notes (opt)"
-                  value={signoffForm.notes}
-                  onChange={(e) => setSignoffForm((f) => ({ ...f, notes: e.target.value }))}
-                  style={{ width: 120, ...selectStyle }}
-                />
+                  <input
+                    placeholder="Notes (opt)"
+                    value={signoffForm.notes}
+                    onChange={(e) => setSignoffForm((f) => ({ ...f, notes: e.target.value }))}
+                    style={{ width: 120, ...selectStyle }}
+                  />
 
-                <input
-                  type="number"
-                  min={0}
-                  step={0.25}
-                  placeholder="Hours (opt)"
-                  value={signoffForm.hours}
-                  onChange={(e) => setSignoffForm((f) => ({ ...f, hours: e.target.value }))}
-                  style={{ width: 90, ...selectStyle }}
-                />
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.25}
+                    placeholder="Hours (opt)"
+                    value={signoffForm.hours}
+                    onChange={(e) => setSignoffForm((f) => ({ ...f, hours: e.target.value }))}
+                    style={{ width: 90, ...selectStyle }}
+                  />
 
-                <button
-                  type="submit"
-                  disabled={busySignoff || !signoffForm.member_id || !signoffForm.task_id}
-                  style={{
-                    fontSize: 13,
-                    padding: "6px 14px",
-                    borderRadius: 6,
-                    border: "1px solid #86efac",
-                    background: "#f0fdf4",
-                    color: "#15803d",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                  }}
-                >
-                  {busySignoff ? "Recording…" : "Record Skill"}
-                </button>
-              </form>
+                  <button
+                    type="submit"
+                    disabled={busySignoff || !signoffForm.member_id || !signoffForm.task_id}
+                    style={{
+                      fontSize: 13,
+                      padding: "6px 14px",
+                      borderRadius: 6,
+                      border: "1px solid #86efac",
+                      background: "#f0fdf4",
+                      color: "#15803d",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {busySignoff ? "Recording…" : "Record Skill"}
+                  </button>
+                </form>
+              )}
 
               {signoffMsg && (
                 <p style={{ fontSize: 12, marginTop: 8, color: signoffMsg.startsWith("Skill recorded") ? "#15803d" : "#dc2626" }}>

@@ -562,7 +562,7 @@ export default function TrainingDetailPage() {
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
         <h1 style={{ margin: 0 }}>{session?.title ?? "Training Session"}</h1>
 
-        {session && (
+        {session && canEdit && (
           session.status === "scheduled" ? (
             <button
               type="button"
@@ -684,19 +684,21 @@ export default function TrainingDetailPage() {
       {/* ── Attendance ── */}
       <section style={sectionStyle}>
         <h2 style={h2}>Attendance <span style={muted}>({attendance.length})</span></h2>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <select value={attMemberId} onChange={(e) => setAttMemberId(e.target.value)} style={inputStyle}>
-            <option value="">Select member…</option>
-            {allMembers
-              .filter((m) => !attendance.find((a) => a.member_id === m.id))
-              .map((m) => (
-                <option key={m.id} value={m.id}>{memberName(m)}</option>
-              ))}
-          </select>
-          <button type="button" onClick={addAttendance} disabled={!attMemberId || busy !== ""}>
-            {busy === "att" ? "Adding…" : "Add"}
-          </button>
-        </div>
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select value={attMemberId} onChange={(e) => setAttMemberId(e.target.value)} style={inputStyle}>
+              <option value="">Select member…</option>
+              {allMembers
+                .filter((m) => !attendance.find((a) => a.member_id === m.id))
+                .map((m) => (
+                  <option key={m.id} value={m.id}>{memberName(m)}</option>
+                ))}
+            </select>
+            <button type="button" onClick={addAttendance} disabled={!attMemberId || busy !== ""}>
+              {busy === "att" ? "Adding…" : "Add"}
+            </button>
+          </div>
+        )}
 
         {attendance.length > 0 ? (
           <ul style={{ marginTop: 10, paddingLeft: 0, listStyle: "none" }}>
@@ -715,14 +717,16 @@ export default function TrainingDetailPage() {
                       </span>
                     ) : null}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeAttendance(a.id)}
-                    disabled={busy !== ""}
-                    style={{ fontSize: 12, padding: "2px 8px", cursor: "pointer" }}
-                  >
-                    Remove
-                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => removeAttendance(a.id)}
+                      disabled={busy !== ""}
+                      style={{ fontSize: 12, padding: "2px 8px", cursor: "pointer" }}
+                    >
+                      Remove
+                    </button>
+                  )}
                 </li>
               );
             })}
@@ -737,18 +741,20 @@ export default function TrainingDetailPage() {
         <h2 style={h2}>Search Groups <span style={muted}>({groups.length})</span></h2>
 
         {/* Add group form */}
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-          <input
-            style={{ ...inputStyle, flex: 1 }}
-            placeholder="Group name (e.g. Team Alpha)"
-            value={newGroupName}
-            onChange={(e) => setNewGroupName(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") addGroup(); }}
-          />
-          <button type="button" onClick={addGroup} disabled={!newGroupName.trim() || busy !== ""}>
-            {busy === "grp-add" ? "Adding…" : "Add Group"}
-          </button>
-        </div>
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+            <input
+              style={{ ...inputStyle, flex: 1 }}
+              placeholder="Group name (e.g. Team Alpha)"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addGroup(); }}
+            />
+            <button type="button" onClick={addGroup} disabled={!newGroupName.trim() || busy !== ""}>
+              {busy === "grp-add" ? "Adding…" : "Add Group"}
+            </button>
+          </div>
+        )}
 
         {groups.length === 0 ? (
           <p style={muted}>No groups yet.</p>
@@ -765,14 +771,16 @@ export default function TrainingDetailPage() {
                   {/* Group header */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                     <strong style={{ fontSize: 14 }}>{g.name}</strong>
-                    <button
-                      type="button"
-                      onClick={() => deleteGroup(g.id)}
-                      disabled={busy !== ""}
-                      style={{ fontSize: 12, padding: "2px 8px" }}
-                    >
-                      Delete Group
-                    </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => deleteGroup(g.id)}
+                        disabled={busy !== ""}
+                        style={{ fontSize: 12, padding: "2px 8px" }}
+                      >
+                        Delete Group
+                      </button>
+                    )}
                   </div>
 
                   {/* Member list */}
@@ -797,14 +805,16 @@ export default function TrainingDetailPage() {
                                 {m.is_trainee ? "trainee" : "qualified"}
                               </span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => removeMemberFromGroup(m.id, g.id)}
-                              disabled={busy !== ""}
-                              style={{ fontSize: 11, padding: "1px 7px" }}
-                            >
-                              Remove
-                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => removeMemberFromGroup(m.id, g.id)}
+                                disabled={busy !== ""}
+                                style={{ fontSize: 11, padding: "1px 7px" }}
+                              >
+                                Remove
+                              </button>
+                            )}
                           </li>
                         );
                       })}
@@ -814,48 +824,50 @@ export default function TrainingDetailPage() {
                   )}
 
                   {/* Add member sub-form */}
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                    <select
-                      style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-                      value={form.memberId}
-                      onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, memberId: e.target.value } }))}
-                    >
-                      <option value="">Add attendee…</option>
-                      {attendance
-                        .filter((a) => !memberIdsInGroup.has(a.member_id))
-                        .map((a) => {
-                          const m = a.members;
-                          const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
-                          return <option key={a.member_id} value={a.member_id}>{name}</option>;
-                        })}
-                    </select>
-                    <select
-                      style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-                      value={form.positionId}
-                      onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, positionId: e.target.value } }))}
-                    >
-                      <option value="">Role (optional)…</option>
-                      {fieldRolePositions.map((p) => (
-                        <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
-                      ))}
-                    </select>
-                    <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, whiteSpace: "nowrap" }}>
-                      <input
-                        type="checkbox"
-                        checked={form.isTrainee ?? true}
-                        onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, isTrainee: e.target.checked } }))}
-                      />
-                      Trainee
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => addMemberToGroup(g.id)}
-                      disabled={!form.memberId || busy !== ""}
-                      style={{ whiteSpace: "nowrap" }}
-                    >
-                      {busy === "sgm-add-" + g.id ? "Adding…" : "Add"}
-                    </button>
-                  </div>
+                  {canEdit && (
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <select
+                        style={{ ...inputStyle, flex: 1, minWidth: 140 }}
+                        value={form.memberId}
+                        onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, memberId: e.target.value } }))}
+                      >
+                        <option value="">Add attendee…</option>
+                        {attendance
+                          .filter((a) => !memberIdsInGroup.has(a.member_id))
+                          .map((a) => {
+                            const m = a.members;
+                            const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
+                            return <option key={a.member_id} value={a.member_id}>{name}</option>;
+                          })}
+                      </select>
+                      <select
+                        style={{ ...inputStyle, flex: 1, minWidth: 140 }}
+                        value={form.positionId}
+                        onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, positionId: e.target.value } }))}
+                      >
+                        <option value="">Role (optional)…</option>
+                        {fieldRolePositions.map((p) => (
+                          <option key={p.id} value={p.id}>{p.code} — {p.name}</option>
+                        ))}
+                      </select>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, whiteSpace: "nowrap" }}>
+                        <input
+                          type="checkbox"
+                          checked={form.isTrainee ?? true}
+                          onChange={(e) => setGroupMemberAdd((prev) => ({ ...prev, [g.id]: { ...form, isTrainee: e.target.checked } }))}
+                        />
+                        Trainee
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => addMemberToGroup(g.id)}
+                        disabled={!form.memberId || busy !== ""}
+                        style={{ whiteSpace: "nowrap" }}
+                      >
+                        {busy === "sgm-add-" + g.id ? "Adding…" : "Add"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -867,20 +879,22 @@ export default function TrainingDetailPage() {
       <section style={sectionStyle}>
         <h2 style={h2}>Skills Practiced <span style={muted}>— skills that can be logged for this session</span></h2>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <select value={mapTaskId} onChange={(e) => setMapTaskId(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-            <option value="">Select skill…</option>
-            {allTasks
-              .filter((t) => t.is_active !== false && !mappedTaskIds.has(t.id))
-              .map((t) => (
-                <option key={t.id} value={t.id}>{t.task_code} — {t.task_name}</option>
-              ))}
-          </select>
+        {canEdit && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select value={mapTaskId} onChange={(e) => setMapTaskId(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+              <option value="">Select skill…</option>
+              {allTasks
+                .filter((t) => t.is_active !== false && !mappedTaskIds.has(t.id))
+                .map((t) => (
+                  <option key={t.id} value={t.id}>{t.task_code} — {t.task_name}</option>
+                ))}
+            </select>
 
-          <button type="button" onClick={addTaskToMap} disabled={!mapTaskId || busy !== ""}>
-            {busy === "map" ? "Adding…" : "Add Skill"}
-          </button>
-        </div>
+            <button type="button" onClick={addTaskToMap} disabled={!mapTaskId || busy !== ""}>
+              {busy === "map" ? "Adding…" : "Add Skill"}
+            </button>
+          </div>
+        )}
 
         {taskMap.length > 0 ? (
           <ul style={{ marginTop: 10, paddingLeft: 0, listStyle: "none" }}>
@@ -890,14 +904,16 @@ export default function TrainingDetailPage() {
                   <strong>{(t.tasks as { task_code?: string })?.task_code}</strong>
                   <span style={muted}> — {(t.tasks as { task_name?: string })?.task_name}</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => removeTaskFromMap(t.id)}
-                  disabled={busy !== ""}
-                  style={{ fontSize: 12, padding: "2px 8px", cursor: "pointer" }}
-                >
-                  Remove
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => removeTaskFromMap(t.id)}
+                    disabled={busy !== ""}
+                    style={{ fontSize: 12, padding: "2px 8px", cursor: "pointer" }}
+                  >
+                    Remove
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -917,105 +933,109 @@ export default function TrainingDetailPage() {
           <p style={muted}>Add attendance and add skills above to enable use logging.</p>
         ) : (
           <>
-            {/* Scope toggle */}
-            <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-              {(["member", "all"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => { setSoScope(s); setSoMemberId(""); setSoTaskMapId(""); }}
-                  style={{
-                    padding: "5px 14px", borderRadius: 6, fontSize: 13, cursor: "pointer",
-                    fontWeight: soScope === s ? 700 : 400,
-                    background: soScope === s ? "#1e40af" : "#f8fafc",
-                    color: soScope === s ? "#fff" : "#374151",
-                    border: soScope === s ? "1px solid #1e40af" : "1px solid #d1d5db",
-                  }}
-                >
-                  {s === "member" ? "Specific member" : "All attendees"}
-                </button>
-              ))}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
-              {soScope === "member" && (
-                <div>
-                  <div style={labelStyle}>Member</div>
-                  <select value={soMemberId} onChange={(e) => { setSoMemberId(e.target.value); setSoTaskMapId(""); }} style={inputStyle}>
-                    <option value="">Select member…</option>
-                    {attendance.map((a) => {
-                      const m = a.members;
-                      const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
-                      return <option key={a.member_id} value={a.member_id}>{name}</option>;
-                    })}
-                  </select>
+            {canEdit && (
+              <>
+                {/* Scope toggle */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
+                  {(["member", "all"] as const).map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => { setSoScope(s); setSoMemberId(""); setSoTaskMapId(""); }}
+                      style={{
+                        padding: "5px 14px", borderRadius: 6, fontSize: 13, cursor: "pointer",
+                        fontWeight: soScope === s ? 700 : 400,
+                        background: soScope === s ? "#1e40af" : "#f8fafc",
+                        color: soScope === s ? "#fff" : "#374151",
+                        border: soScope === s ? "1px solid #1e40af" : "1px solid #d1d5db",
+                      }}
+                    >
+                      {s === "member" ? "Specific member" : "All attendees"}
+                    </button>
+                  ))}
                 </div>
-              )}
 
-              <div>
-                <div style={labelStyle}>Task</div>
-                <select
-                  value={soTaskMapId}
-                  onChange={(e) => setSoTaskMapId(e.target.value)}
-                  style={inputStyle}
-                  disabled={soScope === "member" && !soMemberId}
-                >
-                  <option value="">Select task…</option>
-                  {taskMap.map((t) => {
-                    const signed = soScope === "member" && alreadySigned(soMemberId, t.task_id);
-                    return (
-                      <option key={t.id} value={t.id} disabled={signed}>
-                        {(t.tasks as { task_code?: string })?.task_code} — {(t.tasks as { task_name?: string })?.task_name}
-                        {signed ? " ✓" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 12 }}>
+                  {soScope === "member" && (
+                    <div>
+                      <div style={labelStyle}>Member</div>
+                      <select value={soMemberId} onChange={(e) => { setSoMemberId(e.target.value); setSoTaskMapId(""); }} style={inputStyle}>
+                        <option value="">Select member…</option>
+                        {attendance.map((a) => {
+                          const m = a.members;
+                          const name = m ? `${m.first_name} ${m.last_name}` : a.member_id;
+                          return <option key={a.member_id} value={a.member_id}>{name}</option>;
+                        })}
+                      </select>
+                    </div>
+                  )}
 
-              <div>
-                <div style={labelStyle}>Evaluator name</div>
-                <input style={inputStyle} value={soEvaluator} onChange={(e) => setSoEvaluator(e.target.value)} placeholder="Optional" />
-              </div>
+                  <div>
+                    <div style={labelStyle}>Task</div>
+                    <select
+                      value={soTaskMapId}
+                      onChange={(e) => setSoTaskMapId(e.target.value)}
+                      style={inputStyle}
+                      disabled={soScope === "member" && !soMemberId}
+                    >
+                      <option value="">Select task…</option>
+                      {taskMap.map((t) => {
+                        const signed = soScope === "member" && alreadySigned(soMemberId, t.task_id);
+                        return (
+                          <option key={t.id} value={t.id} disabled={signed}>
+                            {(t.tasks as { task_code?: string })?.task_code} — {(t.tasks as { task_name?: string })?.task_name}
+                            {signed ? " ✓" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
 
-              <div>
-                <div style={labelStyle}>Notes</div>
-                <input style={inputStyle} value={soNotes} onChange={(e) => setSoNotes(e.target.value)} placeholder="Optional" />
-              </div>
+                  <div>
+                    <div style={labelStyle}>Evaluator name</div>
+                    <input style={inputStyle} value={soEvaluator} onChange={(e) => setSoEvaluator(e.target.value)} placeholder="Optional" />
+                  </div>
 
-              <div>
-                <div style={labelStyle}>Hours</div>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.25}
-                  style={inputStyle}
-                  value={soHours}
-                  onChange={(e) => setSoHours(e.target.value)}
-                  placeholder="Optional"
-                />
-              </div>
+                  <div>
+                    <div style={labelStyle}>Notes</div>
+                    <input style={inputStyle} value={soNotes} onChange={(e) => setSoNotes(e.target.value)} placeholder="Optional" />
+                  </div>
 
-              {soScope === "member" ? (
-                <button
-                  type="button"
-                  onClick={signOff}
-                  disabled={!soMemberId || !soTaskMapId || busy !== ""}
-                  style={{ alignSelf: "flex-end" }}
-                >
-                  {busy === "signoff" ? "Logging…" : "Log Use"}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={signOffAll}
-                  disabled={!soTaskMapId || busy !== ""}
-                  style={{ alignSelf: "flex-end" }}
-                >
-                  {busy === "signoff-all" ? "Logging…" : `Log Use for All (${attendance.length})`}
-                </button>
-              )}
-            </div>
+                  <div>
+                    <div style={labelStyle}>Hours</div>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.25}
+                      style={inputStyle}
+                      value={soHours}
+                      onChange={(e) => setSoHours(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+
+                  {soScope === "member" ? (
+                    <button
+                      type="button"
+                      onClick={signOff}
+                      disabled={!soMemberId || !soTaskMapId || busy !== ""}
+                      style={{ alignSelf: "flex-end" }}
+                    >
+                      {busy === "signoff" ? "Logging…" : "Log Use"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={signOffAll}
+                      disabled={!soTaskMapId || busy !== ""}
+                      style={{ alignSelf: "flex-end" }}
+                    >
+                      {busy === "signoff-all" ? "Logging…" : `Log Use for All (${attendance.length})`}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Use log */}
             {sessionSignoffs.length > 0 ? (
