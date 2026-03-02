@@ -9,6 +9,7 @@ type EventRow = {
   start_dt?: string | null;
   end_dt?: string | null;
   location_text?: string | null;
+  description?: string | null;
   status?: string | null;
   is_test?: boolean | null;
 };
@@ -129,12 +130,25 @@ export default function EventsPage() {
                 }}
               >
                 <Link href={`/events/${ev.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
                     <div style={{ fontSize: 13, opacity: 0.75, minWidth: 140 }}>
                       {ev.start_dt ? fmtDate(ev.start_dt) : "—"}
                     </div>
-                    <div style={{ fontWeight: 600, flex: 1 }}>{ev.title}</div>
-                    {ev.location_text ? <div style={{ fontSize: 13, opacity: 0.7 }}>{ev.location_text}</div> : null}
+                    <div style={{ flex: 1, minWidth: 180 }}>
+                      <div style={{ fontWeight: 600 }}>{ev.title}</div>
+                      {ev.location_text && (
+                        <div style={{ marginTop: 3 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Location</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{ev.location_text}</span>
+                        </div>
+                      )}
+                      {ev.description && (
+                        <div style={{ marginTop: 2 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Description</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{ev.description}</span>
+                        </div>
+                      )}
+                    </div>
                     <div>
                       <span style={chipStyle(status)}>{status}</span>
                       {ev.is_test ? (
