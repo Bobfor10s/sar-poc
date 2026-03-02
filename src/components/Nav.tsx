@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type AuthUser = {
@@ -12,15 +12,8 @@ type AuthUser = {
   permissions: string[];
 };
 
-const ROLE_BADGE_COLORS: Record<string, { bg: string; border: string; color: string }> = {
-  admin: { bg: "#dbeafe", border: "#93c5fd", color: "#1e40af" },
-  viewer: { bg: "#d1fae5", border: "#6ee7b7", color: "#065f46" },
-  member: { bg: "#f3f4f6", border: "#d1d5db", color: "#374151" },
-};
-
 export default function Nav() {
   const pathname = usePathname();
-  const router = useRouter();
   const [user, setUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
@@ -62,14 +55,6 @@ export default function Nav() {
   const visibleGeneral = generalLinks.filter((l) => l.always || !l.perm || perms.has(l.perm));
   const visiblePositions = positionsLinks.filter((l) => !l.perm || perms.has(l.perm));
   const visibleAdmin = adminLinks.filter((l) => !l.perm || perms.has(l.perm));
-
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
-  }
-
-  const roleBadge = user ? (ROLE_BADGE_COLORS[user.role] ?? ROLE_BADGE_COLORS.member) : null;
 
   function navLink(href: string, label: string, indent = false) {
     const active = pathname === href || pathname.startsWith(href + "/");
@@ -143,47 +128,6 @@ export default function Nav() {
         </div>
       )}
 
-      {/* Spacer */}
-      <div style={{ flex: 1 }} />
-
-      {/* User info */}
-      {user && (
-        <div style={{ borderTop: "1px solid #94a3b8", padding: "12px 10px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
-          <span style={{ fontSize: 13, color: "#374151", fontWeight: 500 }}>{user.name}</span>
-          {roleBadge && (
-            <span
-              style={{
-                fontSize: 11,
-                padding: "2px 8px",
-                border: `1px solid ${roleBadge.border}`,
-                borderRadius: 999,
-                background: roleBadge.bg,
-                color: roleBadge.color,
-                fontWeight: 700,
-                textTransform: "capitalize",
-                alignSelf: "flex-start",
-              }}
-            >
-              {user.role}
-            </span>
-          )}
-          <button
-            onClick={handleLogout}
-            style={{
-              padding: "5px 12px",
-              borderRadius: 6,
-              border: "1px solid #94a3b8",
-              background: "#f8fafc",
-              color: "#374151",
-              fontSize: 13,
-              cursor: "pointer",
-              textAlign: "left",
-            }}
-          >
-            Sign out
-          </button>
-        </div>
-      )}
     </nav>
   );
 }

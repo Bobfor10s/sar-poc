@@ -2,6 +2,7 @@ import "./globals.css";
 import type { Metadata } from "next";
 import Nav from "@/components/Nav";
 import PageViewLogger from "@/components/PageViewLogger";
+import UserBar from "@/components/UserBar";
 
 export const metadata: Metadata = {
   title: "SAR POC",
@@ -18,7 +19,10 @@ export default function RootLayout({
       <body style={{ display: "flex", minHeight: "100vh", margin: 0 }}>
         <Nav />
         <PageViewLogger />
-        <div style={{ flex: 1, overflowY: "auto" }}>{children}</div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+          <UserBar />
+          <div style={{ flex: 1, overflowY: "auto" }}>{children}</div>
+        </div>
       </body>
     </html>
   );
