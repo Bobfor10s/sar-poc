@@ -35,12 +35,12 @@ export async function POST(req: Request) {
     (req as any).headers.get("x-real-ip") ??
     null;
   const ua = (req as any).headers.get("user-agent") ?? null;
-  supabaseDb.from("login_log").insert({
+  void supabaseDb.from("login_log").insert({
     member_id: member?.id ?? null,
     email,
     ip_address: ip,
     user_agent: ua,
-  }).then(() => {}).catch(() => {});
+  });
 
   const response = NextResponse.json({ ok: true, role, name, user: data.user });
   response.cookies.set("sar-role", role, { httpOnly: true, sameSite: "lax", path: "/" });
