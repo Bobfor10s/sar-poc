@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requireAuth, requirePermission } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -357,5 +358,15 @@ export async function POST(req: Request) {
     .single();
 
   if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+
+  const [{ data: mRow }, { data: tRow }] = await Promise.all([
+    supabaseDb.from("members").select("first_name, last_name").eq("id", member_id).single(),
+    supabaseDb.from("position_tasks").select("task_name").eq("id", task_id).single(),
+  ]);
+  await logActivity(req, "skill_signoff", {
+    member: mRow ? `${mRow.first_name} ${mRow.last_name}`.trim() : member_id,
+    task: tRow?.task_name ?? task_id,
+  });
+
   return NextResponse.json({ data: inserted }, { status: 201 });
 }

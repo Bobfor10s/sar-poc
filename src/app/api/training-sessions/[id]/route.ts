@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requirePermission } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -80,6 +81,7 @@ export async function PATCH(req: Request, ctx: any) {
 
   const { data, error } = await supabaseDb.from("training_sessions").update(patch).eq("id", id).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logActivity(req, "edit_training", { title: data.title });
   return NextResponse.json({ data });
 }
 

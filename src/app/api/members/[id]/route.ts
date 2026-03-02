@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requireAuth, requirePermission } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -125,6 +126,8 @@ export async function PATCH(req: Request, ctx: Ctx) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  await logActivity(req, "edit_member", { name: `${data.first_name} ${data.last_name}`.trim() });
 
   // Auto-assign SEARCHER when approving an applicant for the first time
   if (wasApplicant && patch.joined_at) {

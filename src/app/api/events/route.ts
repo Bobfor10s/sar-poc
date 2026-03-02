@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requirePermission } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 export async function GET() {
   const check = await requirePermission("read_all");
@@ -46,5 +47,6 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logActivity(req, "create_event", { title: data.title });
   return NextResponse.json(data, { status: 201 });
 }

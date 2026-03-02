@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requirePermission } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
@@ -161,6 +162,8 @@ export async function PATCH(req: Request, ctx: any) {
     .single();
 
   if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+
+  await logActivity(req, "edit_call", { title: updated.title });
 
   // When closing a call, auto-clear any members still checked in
   if (update.status === "closed") {

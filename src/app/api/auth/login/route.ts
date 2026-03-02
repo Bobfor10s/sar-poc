@@ -35,14 +35,21 @@ export async function POST(req: Request) {
     (req as any).headers.get("x-real-ip") ??
     null;
   const ua = (req as any).headers.get("user-agent") ?? null;
-  await supabaseDb.from("login_log").insert({
-    member_id: member?.id ?? null,
-    email,
-    ip_address: ip,
-    user_agent: ua,
-  });
+  const { data: logRow } = await supabaseDb
+    .from("login_log")
+    .insert({
+      member_id: member?.id ?? null,
+      email,
+      ip_address: ip,
+      user_agent: ua,
+    })
+    .select("id")
+    .single();
 
   const response = NextResponse.json({ ok: true, role, name, user: data.user });
   response.cookies.set("sar-role", role, { httpOnly: true, sameSite: "lax", path: "/" });
+  if (logRow?.id) {
+    response.cookies.set("sar-log-id", logRow.id, { httpOnly: true, sameSite: "lax", path: "/" });
+  }
   return response;
 }

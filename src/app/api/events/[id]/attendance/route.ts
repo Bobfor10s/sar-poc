@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requireAuth } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -64,7 +65,7 @@ export async function POST(req: Request, ctx: any) {
   // Fetch event config
   const { data: ev } = await supabaseDb
     .from("events")
-    .select("start_dt, end_dt, allow_rsvp, allow_early_checkin, early_checkin_minutes")
+    .select("title, start_dt, end_dt, allow_rsvp, allow_early_checkin, early_checkin_minutes")
     .eq("id", event_id)
     .single();
 
@@ -126,6 +127,7 @@ export async function POST(req: Request, ctx: any) {
       .eq("event_id", event_id)
       .order("created_at", { ascending: true });
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 });
+    await logActivity(req, "official_checkin", { event: ev?.title ?? event_id });
     return NextResponse.json(data ?? []);
   }
 
@@ -173,5 +175,8 @@ export async function POST(req: Request, ctx: any) {
     .order("created_at", { ascending: true });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const actionMap: Record<string, string> = { arrive: "check_in", clear: "check_out", rsvp: "rsvp", early_arrive: "early_arrive" };
+  await logActivity(req, actionMap[action] ?? action, { event: ev?.title ?? event_id });
   return NextResponse.json(data ?? []);
 }

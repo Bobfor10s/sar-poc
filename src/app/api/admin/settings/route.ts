@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requirePermission } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 export async function GET() {
   const check = await requirePermission("manage_members");
@@ -33,5 +34,6 @@ export async function PATCH(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  await logActivity(req, "edit_settings");
   return NextResponse.json({ data });
 }

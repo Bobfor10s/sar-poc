@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requireAuth } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
   if (action === "rsvp" || action === "early_arrive" || action === "official") {
     const { data: ts } = await supabaseDb
       .from("training_sessions")
-      .select("start_dt, end_dt, allow_rsvp, allow_early_checkin, early_checkin_minutes")
+      .select("title, start_dt, end_dt, allow_rsvp, allow_early_checkin, early_checkin_minutes")
       .eq("id", training_session_id)
       .single();
 
@@ -86,6 +87,7 @@ export async function POST(req: Request) {
         .eq("training_session_id", training_session_id)
         .order("created_at", { ascending: true });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await logActivity(req, "rsvp", { session: ts?.title ?? training_session_id });
       return NextResponse.json({ data }, { status: 201 });
     }
 
@@ -127,6 +129,7 @@ export async function POST(req: Request) {
         .eq("training_session_id", training_session_id)
         .order("created_at", { ascending: true });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await logActivity(req, "early_arrive", { session: ts?.title ?? training_session_id });
       return NextResponse.json({ data }, { status: 201 });
     }
 
@@ -148,6 +151,7 @@ export async function POST(req: Request) {
         .eq("training_session_id", training_session_id)
         .order("created_at", { ascending: true });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      await logActivity(req, "official_checkin", { session: ts?.title ?? training_session_id });
       return NextResponse.json({ data }, { status: 201 });
     }
   }
@@ -178,6 +182,8 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  const { data: tsRow } = await supabaseDb.from("training_sessions").select("title").eq("id", training_session_id).single();
+  await logActivity(req, "check_in", { session: tsRow?.title ?? training_session_id });
   return NextResponse.json({ data }, { status: 201 });
 }
 

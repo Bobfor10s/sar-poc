@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requireAuth, requirePermission } from "@/lib/supabase/require-permission";
+import { logActivity } from "@/lib/supabase/log-activity";
 
 async function getIdFromCtx(ctx: any): Promise<string> {
   const p = ctx?.params;
@@ -139,6 +140,11 @@ export async function POST(req: Request, ctx: any) {
 
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
   }
+
+  // Log activity
+  const logAction = action === "clear" ? "check_out" : "check_in";
+  const { data: callRow } = await supabaseDb.from("calls").select("title").eq("id", call_id).single();
+  await logActivity(req, logAction, { call: callRow?.title ?? call_id });
 
   // Return updated list (what your UI already expects)
   const { data, error } = await fetchAttendanceList(call_id);

@@ -12,6 +12,7 @@ export async function GET() {
     user: {
       id: auth.member.id,
       name: `${auth.member.first_name} ${auth.member.last_name}`,
+      email: auth.member.email,
       role: auth.role,
       permissions: auth.permissions,
     },

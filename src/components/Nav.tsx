@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 type AuthUser = {
   id: string;
   name: string;
+  email?: string;
   role: string;
   permissions: string[];
 };
@@ -53,7 +54,9 @@ export default function Nav() {
   const adminLinks = [
     { href: "/admin/approvals", label: "Approvals", perm: "approve_positions" },
     { href: "/admin/settings", label: "Settings", perm: "manage_members" },
-    { href: "/admin/login-log", label: "Login Log", perm: "manage_members" },
+    ...(user?.email === "bob@wilsonclan.net"
+      ? [{ href: "/admin/login-log", label: "Login Log", perm: "" }]
+      : []),
   ];
 
   const visibleGeneral = generalLinks.filter((l) => l.always || !l.perm || perms.has(l.perm));
