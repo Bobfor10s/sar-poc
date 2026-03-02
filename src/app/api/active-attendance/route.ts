@@ -57,5 +57,26 @@ export async function GET() {
     }
   }
 
+  // Also surface en-route members (on_my_way_at set, time_in null) for active calls
+  const enRoutePromises = activeCalls.map(async (c) => {
+    const { data } = await supabaseDb
+      .from("call_attendance")
+      .select("member_id")
+      .eq("call_id", c.id)
+      .not("on_my_way_at", "is", null)
+      .is("time_in", null);
+    return { title: c.title ?? "Call", data: data ?? [] };
+  });
+
+  const enRouteResults = await Promise.all(enRoutePromises);
+  for (const { title, data } of enRouteResults) {
+    for (const row of data) {
+      // Only add if not already on-site
+      if (!locationMap[row.member_id]) {
+        locationMap[row.member_id] = { type: "en_route", title };
+      }
+    }
+  }
+
   return NextResponse.json(locationMap);
 }

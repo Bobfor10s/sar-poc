@@ -162,7 +162,12 @@ export default function MembersPage() {
       if (sortKey === "name") return norm(`${m.last_name ?? ""}, ${m.first_name ?? ""}`);
       if (sortKey === "sar") return norm(m.sar_primary_code ?? m.sar_codes ?? "");
       if (sortKey === "status") return norm(m.status ?? "");
-      if (sortKey === "onsite") return memberLocations[m.id] ? "0" : "1";
+      if (sortKey === "onsite") {
+        const loc = memberLocations[m.id];
+        if (!loc) return "2";
+        if (loc.type === "en_route") return "1";
+        return "0";
+      }
       if (sortKey === "email") return norm(m.email ?? "");
       if (sortKey === "phone") return norm(m.phone ?? "");
       return "";
@@ -328,7 +333,7 @@ export default function MembersPage() {
                     <td style={td}>
                       {memberLocations[m.id] && (
                         <span style={locationBadgeStyle(memberLocations[m.id].type)}>
-                          {memberLocations[m.id].type.charAt(0).toUpperCase() + memberLocations[m.id].type.slice(1)}
+                          {locationLabel(memberLocations[m.id].type)}
                         </span>
                       )}
                     </td>
@@ -451,9 +456,15 @@ function Th({
   );
 }
 
+function locationLabel(type: string): string {
+  if (type === "en_route") return "En Route";
+  return type.charAt(0).toUpperCase() + type.slice(1);
+}
+
 function locationBadgeStyle(type: string): React.CSSProperties {
   const base: React.CSSProperties = { fontSize: 11, padding: "1px 7px", borderRadius: 999, fontWeight: 700, whiteSpace: "nowrap" };
   if (type === "call")     return { ...base, background: "#fef9c3", border: "1px solid #ca8a04", color: "#713f12" };
+  if (type === "en_route") return { ...base, background: "#fef3c7", border: "1px solid #f59e0b", color: "#92400e" };
   if (type === "training") return { ...base, background: "#eff6ff", border: "1px solid #3b82f6", color: "#1e3a8a" };
   if (type === "meeting")  return { ...base, background: "#f0fdf4", border: "1px solid #22c55e", color: "#14532d" };
   if (type === "event")    return { ...base, background: "#faf5ff", border: "1px solid #a855f7", color: "#581c87" };
