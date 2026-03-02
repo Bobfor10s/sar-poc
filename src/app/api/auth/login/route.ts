@@ -29,13 +29,13 @@ export async function POST(req: Request) {
   const role = member?.role ?? "member";
   const name = member ? `${member.first_name} ${member.last_name}`.trim() : null;
 
-  // Write login log entry (fire-and-forget; don't fail login if this fails)
+  // Write login log entry (awaited so it completes before the serverless fn exits)
   const ip =
     (req as any).headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     (req as any).headers.get("x-real-ip") ??
     null;
   const ua = (req as any).headers.get("user-agent") ?? null;
-  void supabaseDb.from("login_log").insert({
+  await supabaseDb.from("login_log").insert({
     member_id: member?.id ?? null,
     email,
     ip_address: ip,
