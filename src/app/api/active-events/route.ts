@@ -64,7 +64,7 @@ export async function GET() {
 
   const [callAtt, trainingAtt, meetingAtt, eventAtt] = await Promise.all([
     callIds.length
-      ? supabaseDb.from("call_attendance").select("call_id, time_in, time_out").eq("member_id", memberId).in("call_id", callIds)
+      ? supabaseDb.from("call_attendance").select("call_id, time_in, time_out, on_my_way_at").eq("member_id", memberId).in("call_id", callIds)
       : Promise.resolve({ data: [] }),
     trainingIds.length
       ? supabaseDb.from("training_attendance").select("training_session_id, time_in, time_out, rsvp_at, arrived_at").eq("member_id", memberId).in("training_session_id", trainingIds)
@@ -152,11 +152,11 @@ export async function GET() {
   const eventAttMap = new Map((eventAtt.data ?? []).map((r: any) => [r.event_id, r]));
 
   const result = allActive.map((item) => {
-    let att: { time_in: string | null; time_out: string | null; rsvp_at?: string | null; arrived_at?: string | null } | null = null;
+    let att: { time_in: string | null; time_out: string | null; rsvp_at?: string | null; arrived_at?: string | null; on_my_way_at?: string | null } | null = null;
 
     if (item.type === "call") {
       const r = callAttMap.get(item.id) as any;
-      if (r) att = { time_in: r.time_in, time_out: r.time_out };
+      if (r) att = { time_in: r.time_in, time_out: r.time_out, on_my_way_at: r.on_my_way_at };
     } else if (item.type === "training") {
       const r = trainingAttMap.get(item.id) as any;
       if (r) att = { time_in: r.time_in, time_out: r.time_out, rsvp_at: r.rsvp_at, arrived_at: r.arrived_at };

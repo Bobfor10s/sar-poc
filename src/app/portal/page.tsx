@@ -14,7 +14,7 @@ type ActiveEvent = {
   allow_early_checkin: boolean;
   early_checkin_minutes: number | null;
   start_dt: string | null;
-  my_attendance: { time_in: string | null; time_out: string | null; rsvp_at?: string | null; arrived_at?: string | null } | null;
+  my_attendance: { time_in: string | null; time_out: string | null; rsvp_at?: string | null; arrived_at?: string | null; on_my_way_at?: string | null } | null;
 };
 
 type UpcomingItem = {
@@ -122,6 +122,7 @@ export default function PortalPage() {
   const [busy, setBusy] = useState<Record<string, boolean>>({});
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchIdRef = useRef<Record<string, number>>({});
 
   async function logout() {
     setLoggingOut(true);
@@ -163,8 +164,13 @@ export default function PortalPage() {
     pollRef.current = setInterval(loadAll, 30000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      const watches = { ...watchIdRef.current };
+      for (const watchId of Object.values(watches)) {
+        navigator.geolocation?.clearWatch(watchId);
+      }
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   function setMsg(id: string, msg: string) {
     setCardMsg((prev) => ({ ...prev, [id]: msg }));
@@ -314,6 +320,79 @@ export default function PortalPage() {
     doCheckin(ev, "arrive", note.trim());
   }
 
+  async function handleOnMyWay(ev: ActiveEvent) {
+    setBusy((prev) => ({ ...prev, [ev.id]: true }));
+    setMsg(ev.id, "");
+    try {
+      const meRes = await fetch("/api/auth/me");
+      const me = await meRes.json().catch(() => ({}));
+      const member_id = me?.user?.id;
+
+      const res = await fetch(`/api/calls/${ev.id}/attendance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "on_my_way", member_id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Failed");
+
+      // Refresh active events
+      const evRes = await fetch("/api/active-events");
+      if (evRes.ok) setEvents(await evRes.json().catch(() => []));
+
+      // Start GPS tracking
+      if (!navigator.geolocation) {
+        setMsg(ev.id, "GPS not available — tracking disabled. Use 'I'm Here' when you arrive.");
+        return;
+      }
+
+      const hasGeofence = !!(ev.incident_lat && ev.incident_lng);
+      const radius = ev.incident_radius_m ?? 500;
+
+      const watchId = navigator.geolocation.watchPosition(
+        async (pos) => {
+          const { latitude: lat, longitude: lng } = pos.coords;
+
+          // Send location update (fire-and-forget)
+          fetch(`/api/calls/${ev.id}/location`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ member_id, lat, lng }),
+          }).catch(() => {});
+
+          // Auto-arrive if within geofence
+          if (hasGeofence) {
+            const dist = haversineMeters(lat, lng, ev.incident_lat!, ev.incident_lng!);
+            if (dist <= radius) {
+              navigator.geolocation.clearWatch(watchIdRef.current[ev.id]);
+              delete watchIdRef.current[ev.id];
+              await doCheckin(ev, "arrive");
+            }
+          }
+        },
+        () => {
+          setMsg(ev.id, "Could not track location. Use 'I'm Here' when you arrive.");
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+      );
+
+      watchIdRef.current[ev.id] = watchId;
+    } catch (e: any) {
+      setMsg(ev.id, e?.message ?? "Error");
+    } finally {
+      setBusy((prev) => ({ ...prev, [ev.id]: false }));
+    }
+  }
+
+  async function handleImHere(ev: ActiveEvent) {
+    // Stop GPS watch
+    if (watchIdRef.current[ev.id] != null) {
+      navigator.geolocation?.clearWatch(watchIdRef.current[ev.id]);
+      delete watchIdRef.current[ev.id];
+    }
+    doCheckin(ev, "arrive");
+  }
+
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
       {/* Members: full portal header with logout. Admins/viewers: simple heading (Nav handles name + logout) */}
@@ -348,19 +427,23 @@ export default function PortalPage() {
               const preArrived = att && att.arrived_at && !att.time_in;
               const checkedIn = att && att.time_in && !att.time_out;
               const clearedOut = att && att.time_in && att.time_out;
-              const notIn = !att || (!att.time_in && !att.arrived_at);
+              const enRoute = ev.type === "call" && att && att.on_my_way_at && !att.time_in;
+              const notIn = !att || (!att.time_in && !att.arrived_at && !att.on_my_way_at);
               const msg = cardMsg[ev.id] ?? "";
               const isShowOverride = showOverride[ev.id] ?? false;
               const isBusy = busy[ev.id] ?? false;
+
+              const borderColor = checkedIn ? "#86efac" : enRoute ? "#fcd34d" : "#e5e5e5";
+              const bgColor = checkedIn ? "#f0fdf4" : enRoute ? "#fef9c3" : "#fff";
 
               return (
                 <div
                   key={ev.id}
                   style={{
                     padding: "14px 16px",
-                    border: `1px solid ${checkedIn ? "#86efac" : "#e5e5e5"}`,
+                    border: `1px solid ${borderColor}`,
                     borderRadius: 12,
-                    background: checkedIn ? "#f0fdf4" : "#fff",
+                    background: bgColor,
                   }}
                 >
                   <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
@@ -421,23 +504,66 @@ export default function PortalPage() {
                         Pre-Arrived — awaiting official check-in
                       </span>
                     )}
+                    {enRoute && !checkedIn && (
+                      <>
+                        <span style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #f59e0b", background: "#fef3c7", color: "#92400e", fontWeight: 600, fontSize: 13 }}>
+                          En Route
+                        </span>
+                        <button
+                          onClick={() => handleImHere(ev)}
+                          disabled={isBusy}
+                          style={{
+                            padding: "7px 16px",
+                            borderRadius: 8,
+                            border: "1px solid #16a34a",
+                            background: "#dcfce7",
+                            color: "#15803d",
+                            fontWeight: 600,
+                            fontSize: 13,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {isBusy ? "…" : "I\u2019m Here"}
+                        </button>
+                      </>
+                    )}
                     {notIn && !isShowOverride && (
-                      <button
-                        onClick={() => handleCheckin(ev, "arrive")}
-                        disabled={isBusy}
-                        style={{
-                          padding: "7px 16px",
-                          borderRadius: 8,
-                          border: "1px solid #16a34a",
-                          background: "#dcfce7",
-                          color: "#15803d",
-                          fontWeight: 600,
-                          fontSize: 13,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {isBusy ? "…" : "Check In"}
-                      </button>
+                      <>
+                        {ev.type === "call" && (
+                          <button
+                            onClick={() => handleOnMyWay(ev)}
+                            disabled={isBusy}
+                            style={{
+                              padding: "7px 16px",
+                              borderRadius: 8,
+                              border: "1px solid #d97706",
+                              background: "#fef3c7",
+                              color: "#92400e",
+                              fontWeight: 600,
+                              fontSize: 13,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {isBusy ? "…" : "On My Way"}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleCheckin(ev, "arrive")}
+                          disabled={isBusy}
+                          style={{
+                            padding: "7px 16px",
+                            borderRadius: 8,
+                            border: "1px solid #16a34a",
+                            background: "#dcfce7",
+                            color: "#15803d",
+                            fontWeight: 600,
+                            fontSize: 13,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {isBusy ? "…" : "Check In"}
+                        </button>
+                      </>
                     )}
                     {checkedIn && (
                       <>

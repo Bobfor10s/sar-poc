@@ -22,7 +22,7 @@ function isUuid(v: string) {
 async function fetchAttendanceList(call_id: string) {
   return await supabaseDb
     .from("call_attendance")
-    .select("*")
+    .select("id, call_id, member_id, time_in, time_out, role_on_call, notes, checkin_override_note, on_my_way_at, current_lat, current_lng, location_updated_at, created_at")
     .eq("call_id", call_id)
     .order("created_at", { ascending: true });
 }
@@ -87,7 +87,7 @@ export async function POST(req: Request, ctx: any) {
   // 1) Check if row already exists (because unique call_id+member_id)
   const { data: existing, error: existingErr } = await supabaseDb
     .from("call_attendance")
-    .select("id, time_in, time_out")
+    .select("id, time_in, time_out, on_my_way_at")
     .eq("call_id", call_id)
     .eq("member_id", member_id)
     .maybeSingle();
@@ -116,6 +116,11 @@ export async function POST(req: Request, ctx: any) {
     if (!existing?.time_out) payload.time_out = nowIso;
   }
 
+  if (action === "on_my_way") {
+    // only set if not already set
+    if (!(existing as any)?.on_my_way_at) payload.on_my_way_at = nowIso;
+  }
+
   // 3) Insert or update
   if (existing?.id) {
     // Update existing row
@@ -142,7 +147,7 @@ export async function POST(req: Request, ctx: any) {
   }
 
   // Log activity
-  const logAction = action === "clear" ? "check_out" : "check_in";
+  const logAction = action === "clear" ? "check_out" : action === "on_my_way" ? "on_my_way" : "check_in";
   const { data: callRow } = await supabaseDb.from("calls").select("title").eq("id", call_id).single();
   await logActivity(req, logAction, { call: callRow?.title ?? call_id });
 

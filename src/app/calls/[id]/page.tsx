@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
 type Member = {
@@ -31,6 +31,10 @@ type Attendance = {
   time_in?: string | null;
   time_out?: string | null;
   notes?: string | null;
+  on_my_way_at?: string | null;
+  current_lat?: number | null;
+  current_lng?: number | null;
+  location_updated_at?: string | null;
 };
 
 type Task = {
@@ -72,6 +76,19 @@ function toDatetimeLocal(v?: string | null): string {
 
 function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function statusBadge(status: string): React.CSSProperties {
@@ -116,6 +133,7 @@ export default function CallDetailPage() {
   const [savingRow, setSavingRow] = useState("");
 
   const [canEdit, setCanEdit] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Skill sign-off form
   const [signoffForm, setSignoffForm] = useState({ member_id: "", task_id: "", evaluator_name: "", notes: "", hours: "" });
@@ -241,6 +259,27 @@ export default function CallDetailPage() {
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callId]);
+
+  // Auto-poll attendance every 15s while call is open
+  useEffect(() => {
+    if (call?.status === "open") {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        if (!callId || !isUuid(callId)) return;
+        const res = await fetch(`/api/calls/${callId}/attendance`).catch(() => null);
+        if (res?.ok) {
+          const json = await res.json().catch(() => ([]));
+          setAttendance(asArray<Attendance>(json));
+        }
+      }, 15000);
+    } else {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [call?.status, callId]);
 
   async function postAttendance(action?: "arrive" | "clear") {
     if (!selectedMemberId) return;
@@ -535,6 +574,7 @@ export default function CallDetailPage() {
                     <th style={thStyle}>Member</th>
                     <th style={thStyle}>Time In</th>
                     <th style={thStyle}>Time Out</th>
+                    <th style={thStyle}>Distance / ETA</th>
                     <th style={thStyle}></th>
                   </tr>
                 </thead>
@@ -545,10 +585,48 @@ export default function CallDetailPage() {
                     const isDirty =
                       edit.time_in !== toDatetimeLocal(a.time_in) ||
                       edit.time_out !== toDatetimeLocal(a.time_out);
+                    const isEnRoute = a.on_my_way_at && !a.time_in;
+                    const rowStyle: React.CSSProperties = isEnRoute
+                      ? { background: "#fef9c3", borderLeft: "3px solid #f59e0b" }
+                      : {};
+
+                    // Distance/ETA calculation
+                    let distEta: React.ReactNode = null;
+                    if (isEnRoute) {
+                      if (call?.incident_lat && call?.incident_lng && a.current_lat && a.current_lng) {
+                        const distM = haversineMeters(a.current_lat, a.current_lng, call.incident_lat, call.incident_lng);
+                        const distKm = distM / 1000;
+                        const etaMin = Math.round((distKm / 60) * 60);
+                        distEta = (
+                          <span style={{ fontSize: 12, color: "#92400e" }}>
+                            {distKm.toFixed(1)} km · ~{etaMin} min
+                          </span>
+                        );
+                      } else {
+                        distEta = <span style={{ fontSize: 12, color: "#94a3b8" }}>Location unknown</span>;
+                      }
+                    }
+
                     return (
-                      <tr key={a.id}>
+                      <tr key={a.id} style={rowStyle}>
                         <td style={tdStyle}>
                           <strong>{memberName(a.member_id)}</strong>
+                          {isEnRoute && (
+                            <span
+                              style={{
+                                marginLeft: 8,
+                                fontSize: 11,
+                                padding: "1px 7px",
+                                borderRadius: 999,
+                                background: "#fef3c7",
+                                border: "1px solid #f59e0b",
+                                color: "#92400e",
+                                fontWeight: 600,
+                              }}
+                            >
+                              En Route
+                            </span>
+                          )}
                           {a.time_in && !a.time_out && (
                             <span
                               style={{
@@ -592,6 +670,7 @@ export default function CallDetailPage() {
                             style={timeInputStyle}
                           />
                         </td>
+                        <td style={tdStyle}>{distEta}</td>
                         <td style={tdStyle}>
                           {isDirty && canEdit && (
                             <button

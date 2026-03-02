@@ -23,6 +23,7 @@ const ACTION_LABELS: Record<string, string> = {
   skill_approval: "Skill Approved",
   edit_settings: "Changed Settings",
   page_view: "Viewed Page",
+  on_my_way: "On My Way",
 };
 
 type LogEntry = {
