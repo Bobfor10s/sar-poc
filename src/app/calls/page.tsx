@@ -8,6 +8,7 @@ type CallRow = {
   title?: string | null;
   start_dt?: string | null;
   status?: string | null;
+  location_text?: string | null;
   summary?: string | null;
 };
 
@@ -126,8 +127,14 @@ export default function CallsPage() {
                     </div>
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ fontWeight: 600 }}>{c.title ?? "(Untitled)"}</div>
-                      {c.summary && (
+                      {c.location_text && (
                         <div style={{ marginTop: 3 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Location</span>
+                          <span style={{ fontSize: 13, marginLeft: 6 }}>{c.location_text}</span>
+                        </div>
+                      )}
+                      {c.summary && (
+                        <div style={{ marginTop: 2 }}>
                           <span style={{ fontSize: 11, fontWeight: 600, opacity: 0.55, textTransform: "uppercase", letterSpacing: "0.05em" }}>Summary</span>
                           <span style={{ fontSize: 13, marginLeft: 6 }}>{c.summary}</span>
                         </div>

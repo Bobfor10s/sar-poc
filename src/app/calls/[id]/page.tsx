@@ -17,6 +17,7 @@ type Call = {
   status?: string | null;
   start_dt?: string | null;
   end_dt?: string | null;
+  location_text?: string | null;
   summary?: string | null;
   incident_lat?: number | null;
   incident_lng?: number | null;
@@ -405,6 +406,11 @@ export default function CallDetailPage() {
 
           {/* Info section */}
           <section style={{ padding: 14, border: "1px solid #e5e5e5", borderRadius: 10, marginBottom: 16 }}>
+            {call.location_text && (
+              <div style={{ fontSize: 13, marginBottom: 8 }}>
+                <span style={{ fontWeight: 600 }}>Location: </span>{call.location_text}
+              </div>
+            )}
             {call.summary && (
               <div style={{ fontSize: 13, marginBottom: 12, whiteSpace: "pre-wrap", opacity: 0.85 }}>
                 {call.summary}

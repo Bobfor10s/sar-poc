@@ -35,6 +35,7 @@ export async function POST(req: Request) {
     visibility: "members",
   };
 
+  if (body.location_text) payload.location_text = String(body.location_text).trim();
   if (body.summary) payload.summary = String(body.summary).trim();
   if (body.incident_lat != null && body.incident_lat !== "") {
     payload.incident_lat = Number(body.incident_lat);

@@ -7,6 +7,7 @@ export default function NewCallPage() {
   const router = useRouter();
   const [form, setForm] = useState({
     title: "",
+    location_text: "",
     incident_lat: "",
     incident_lng: "",
     incident_radius_m: "500",
@@ -56,6 +57,7 @@ export default function NewCallPage() {
       status: "open",
       visibility: "members",
     };
+    if (form.location_text.trim()) payload.location_text = form.location_text.trim();
     if (form.summary.trim()) payload.summary = form.summary.trim();
     if (form.incident_lat.trim()) payload.incident_lat = Number(form.incident_lat);
     if (form.incident_lng.trim()) payload.incident_lng = Number(form.incident_lng);
@@ -92,6 +94,18 @@ export default function NewCallPage() {
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder='e.g., "Missing hiker – Macopin Trail"'
+            style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14 }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+            Location
+          </label>
+          <input
+            value={form.location_text}
+            onChange={(e) => setForm({ ...form, location_text: e.target.value })}
+            placeholder='e.g., "Macopin Trail, West Milford"'
             style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14 }}
           />
         </div>
