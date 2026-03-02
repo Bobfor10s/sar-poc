@@ -57,15 +57,22 @@ export async function GET() {
     }
   }
 
-  // Also surface en-route members (on_my_way_at set, time_in null) for active calls
+  // Also surface en-route members for active calls.
+  // Covers two cases:
+  //   1. First-time en-route: on_my_way_at set, time_in null
+  //   2. Re-engage after checkout: on_my_way_at set, time_out set, on_my_way_at > time_out
   const enRoutePromises = activeCalls.map(async (c) => {
     const { data } = await supabaseDb
       .from("call_attendance")
-      .select("member_id")
+      .select("member_id, time_in, time_out, on_my_way_at")
       .eq("call_id", c.id)
-      .not("on_my_way_at", "is", null)
-      .is("time_in", null);
-    return { title: c.title ?? "Call", data: data ?? [] };
+      .not("on_my_way_at", "is", null);
+    const enRoute = (data ?? []).filter((r: any) => {
+      if (r.time_in && !r.time_out) return false; // currently on-site
+      if (r.time_out) return r.on_my_way_at > r.time_out; // re-engaging after checkout
+      return true; // no time_in yet
+    });
+    return { title: c.title ?? "Call", data: enRoute };
   });
 
   const enRouteResults = await Promise.all(enRoutePromises);
