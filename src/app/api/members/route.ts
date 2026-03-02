@@ -125,6 +125,9 @@ export async function POST(req: Request) {
     ? body.joined_at.trim()
     : null;
 
+  const ALLOWED_ROLES = new Set(["member", "viewer", "admin"]);
+  const role = body.role && ALLOWED_ROLES.has(String(body.role)) ? String(body.role) : "member";
+
   const { data, error } = await supabaseDb
     .from("members")
     .insert({
@@ -139,6 +142,7 @@ export async function POST(req: Request) {
       postal_code: body.postal_code ?? null,
       town: body.town ?? null,
       status: "active",
+      role,
       joined_at,
     })
     .select("*")

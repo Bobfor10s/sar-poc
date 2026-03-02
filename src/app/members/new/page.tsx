@@ -25,6 +25,7 @@ export default function NewMemberPage() {
     state: "NJ",
     postal_code: "",
     status: "active",
+    role: "member",
     joined_at: "",
   });
 
@@ -147,6 +148,16 @@ export default function NewMemberPage() {
           <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
             <option value="active">active</option>
             <option value="inactive">inactive</option>
+          </select>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>App Role</div>
+          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}
+            style={{ width: "100%", padding: 8 }}>
+            <option value="member">member — can check in/out, view own profile</option>
+            <option value="viewer">viewer — read-only access to all data</option>
+            <option value="admin">admin — full access</option>
           </select>
         </div>
 
