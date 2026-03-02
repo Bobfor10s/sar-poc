@@ -390,7 +390,53 @@ export default function PortalPage() {
       navigator.geolocation?.clearWatch(watchIdRef.current[ev.id]);
       delete watchIdRef.current[ev.id];
     }
-    doCheckin(ev, "arrive");
+
+    // If no geofence, check in directly
+    if (!ev.incident_lat || !ev.incident_lng) {
+      doCheckin(ev, "arrive");
+      return;
+    }
+
+    // Enforce geofence — same as handleCheckin
+    const radius = ev.incident_radius_m ?? 500;
+
+    if (!navigator.geolocation) {
+      setShowOverride((prev) => ({ ...prev, [ev.id]: true }));
+      setMsg(ev.id, "GPS not available on this device. Enter a note to check in.");
+      return;
+    }
+
+    setBusy((prev) => ({ ...prev, [ev.id]: true }));
+    setMsg(ev.id, "Getting your location…");
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const dist = haversineMeters(
+          pos.coords.latitude,
+          pos.coords.longitude,
+          ev.incident_lat!,
+          ev.incident_lng!
+        );
+        setBusy((prev) => ({ ...prev, [ev.id]: false }));
+        if (dist <= radius) {
+          setMsg(ev.id, "");
+          doCheckin(ev, "arrive");
+        } else {
+          setMsg(ev.id, `You are ${Math.round(dist)} m from the scene (max ${radius} m). Check-in blocked.`);
+        }
+      },
+      (err) => {
+        setBusy((prev) => ({ ...prev, [ev.id]: false }));
+        if (err.code === err.PERMISSION_DENIED) {
+          setShowOverride((prev) => ({ ...prev, [ev.id]: true }));
+          setMsg(ev.id, "GPS access denied. Enter a note to explain your location and check in.");
+        } else {
+          setShowOverride((prev) => ({ ...prev, [ev.id]: true }));
+          setMsg(ev.id, "Could not get your location. Enter a note to check in.");
+        }
+      },
+      { timeout: 10000 }
+    );
   }
 
   return (
