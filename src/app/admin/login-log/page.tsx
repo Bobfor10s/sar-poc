@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 const ALLOWED_EMAIL = "bob@wilsonclan.net";
 
@@ -188,8 +188,8 @@ export default function LoginLogPage() {
               {entries.map((e) => {
                 const open = expanded.has(e.id);
                 return (
-                  <>
-                    <tr key={e.id} style={{ background: open ? "#f8fafc" : "white" }}>
+                  <React.Fragment key={e.id}>
+                    <tr style={{ background: open ? "#f8fafc" : "white" }}>
                       <td style={{ ...tdStyle, textAlign: "center", cursor: "pointer", color: "#64748b", fontSize: 11 }} onClick={() => toggleExpanded(e.id)}>
                         {open ? "▼" : "▶"}
                       </td>
@@ -213,13 +213,13 @@ export default function LoginLogPage() {
                       </td>
                     </tr>
                     {open && (
-                      <tr key={`${e.id}-detail`} style={{ background: "#f8fafc" }}>
+                      <tr style={{ background: "#f8fafc" }}>
                         <td colSpan={7} style={{ padding: 0, borderBottom: "2px solid #e2e8f0" }}>
                           <ActivityPanel sessionId={e.id} />
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </tbody>
