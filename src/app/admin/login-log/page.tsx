@@ -22,6 +22,7 @@ const ACTION_LABELS: Record<string, string> = {
   skill_signoff: "Skill Sign-Off",
   skill_approval: "Skill Approved",
   edit_settings: "Changed Settings",
+  page_view: "Viewed Page",
 };
 
 type LogEntry = {
