@@ -24,6 +24,12 @@ type Call = {
   incident_radius_m?: number | null;
 };
 
+type AttendancePeriod = {
+  id: string;
+  time_in: string;
+  time_out?: string | null;
+};
+
 type Attendance = {
   id: string;
   call_id: string;
@@ -35,6 +41,7 @@ type Attendance = {
   current_lat?: number | null;
   current_lng?: number | null;
   location_updated_at?: string | null;
+  periods?: AttendancePeriod[];
 };
 
 type Task = {
@@ -572,6 +579,7 @@ export default function CallDetailPage() {
                 <thead>
                   <tr>
                     <th style={thStyle}>Member</th>
+                    <th style={thStyle}>Check-in History</th>
                     <th style={thStyle}>Time In</th>
                     <th style={thStyle}>Time Out</th>
                     <th style={thStyle}>Distance / ETA</th>
@@ -642,6 +650,23 @@ export default function CallDetailPage() {
                             >
                               On Site
                             </span>
+                          )}
+                        </td>
+                        <td style={{ ...tdStyle, fontSize: 12 }}>
+                          {(a.periods ?? []).length === 0 ? (
+                            <span style={{ opacity: 0.35 }}>—</span>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                              {(a.periods ?? []).map((p) => (
+                                <span key={p.id} style={{ whiteSpace: "nowrap", color: "#374151" }}>
+                                  {new Date(p.time_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                  {" → "}
+                                  {p.time_out
+                                    ? new Date(p.time_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                                    : <span style={{ color: "#16a34a", fontWeight: 600 }}>ongoing</span>}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </td>
                         <td style={tdStyle}>

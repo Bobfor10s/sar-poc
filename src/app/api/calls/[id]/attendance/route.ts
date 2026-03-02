@@ -20,11 +20,28 @@ function isUuid(v: string) {
 }
 
 async function fetchAttendanceList(call_id: string) {
-  return await supabaseDb
-    .from("call_attendance")
-    .select("id, call_id, member_id, time_in, time_out, role_on_call, notes, checkin_override_note, on_my_way_at, current_lat, current_lng, location_updated_at, created_at")
-    .eq("call_id", call_id)
-    .order("created_at", { ascending: true });
+  const [attRes, periodsRes] = await Promise.all([
+    supabaseDb
+      .from("call_attendance")
+      .select("id, call_id, member_id, time_in, time_out, role_on_call, notes, checkin_override_note, on_my_way_at, current_lat, current_lng, location_updated_at, created_at")
+      .eq("call_id", call_id)
+      .order("created_at", { ascending: true }),
+    supabaseDb
+      .from("call_attendance_periods")
+      .select("id, member_id, time_in, time_out")
+      .eq("call_id", call_id)
+      .order("time_in", { ascending: true }),
+  ]);
+
+  if (attRes.error) return { data: null, error: attRes.error };
+
+  const periods = periodsRes.data ?? [];
+  const data = (attRes.data ?? []).map((a) => ({
+    ...a,
+    periods: periods.filter((p) => p.member_id === a.member_id),
+  }));
+
+  return { data, error: null };
 }
 
 export async function GET(_req: Request, ctx: any) {
@@ -105,15 +122,14 @@ export async function POST(req: Request, ctx: any) {
   if (requested_time_in) {
     payload.time_in = requested_time_in;
   } else if (action === "arrive") {
-    // Always stamp time_in. If re-arriving after a checkout, also clear time_out.
-    payload.time_in = nowIso;
+    // Keep first arrival as the summary time_in; clear time_out on re-arrive
+    if (!existing?.time_in) payload.time_in = nowIso;
     if (existing?.time_out) payload.time_out = null;
   }
 
   if (requested_time_out) {
     payload.time_out = requested_time_out;
   } else if (action === "clear") {
-    // only set if not already set
     if (!existing?.time_out) payload.time_out = nowIso;
   }
 
@@ -122,9 +138,8 @@ export async function POST(req: Request, ctx: any) {
     payload.on_my_way_at = nowIso;
   }
 
-  // 3) Insert or update
+  // 3) Insert or update main call_attendance row
   if (existing?.id) {
-    // Update existing row
     if (Object.keys(payload).length > 0) {
       const { error: updErr } = await supabaseDb
         .from("call_attendance")
@@ -134,10 +149,7 @@ export async function POST(req: Request, ctx: any) {
       if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
     }
   } else {
-    // Insert new row
     const insertPayload: Record<string, any> = { call_id, member_id, ...payload };
-
-    // If arriving and we didn't set time_in above, set it on insert
     if (action === "arrive" && !insertPayload.time_in) insertPayload.time_in = nowIso;
 
     const { error: insErr } = await supabaseDb
@@ -145,6 +157,32 @@ export async function POST(req: Request, ctx: any) {
       .insert(insertPayload);
 
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+  }
+
+  // 4) Period logging
+  if (action === "arrive") {
+    // Open a new period
+    await supabaseDb
+      .from("call_attendance_periods")
+      .insert({ call_id, member_id, time_in: nowIso });
+  } else if (action === "clear") {
+    // Close the latest open period for this member
+    const { data: openPeriod } = await supabaseDb
+      .from("call_attendance_periods")
+      .select("id")
+      .eq("call_id", call_id)
+      .eq("member_id", member_id)
+      .is("time_out", null)
+      .order("time_in", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (openPeriod?.id) {
+      await supabaseDb
+        .from("call_attendance_periods")
+        .update({ time_out: nowIso })
+        .eq("id", openPeriod.id);
+    }
   }
 
   // Log activity
