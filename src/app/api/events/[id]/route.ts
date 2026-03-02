@@ -71,14 +71,13 @@ export async function PATCH(req: Request, ctx: any) {
   const { data, error } = await supabaseDb.from("events").update(patch).eq("id", id).select("*").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // When end_dt is set, auto-checkout any members still checked in (time_in set, time_out null)
+  // When end_dt is set, auto-checkout all checked-in members (overwrite any stale time_out)
   if (patch.end_dt) {
     await supabaseDb
       .from("event_attendance")
       .update({ time_out: patch.end_dt })
       .eq("event_id", id)
-      .not("time_in", "is", null)
-      .is("time_out", null);
+      .not("time_in", "is", null);
   }
 
   return NextResponse.json({ data });
