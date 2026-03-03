@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type MemberRow = {
   id: string;
@@ -52,6 +52,7 @@ export default function MembersPage() {
   const [err, setErr] = useState<string>("");
   const [memberLocations, setMemberLocations] = useState<Record<string, { type: string; title: string; on_my_way_at?: string | null; anticipated_arrival_at?: string | null; distance_m?: number | null }>>({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const locationPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -122,6 +123,11 @@ export default function MembersPage() {
       .then((r) => r.json())
       .then((json) => setIsAdmin(json?.user?.role === "admin"))
       .catch(() => {});
+    // Auto-refresh location data every 15 s so en-route distance/ETA stays current
+    locationPollRef.current = setInterval(loadOnSite, 15000);
+    return () => {
+      if (locationPollRef.current) clearInterval(locationPollRef.current);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function toggleSort(next: SortKey) {
@@ -347,18 +353,29 @@ export default function MembersPage() {
                                 <span style={{ fontSize: 12, opacity: 0.7 }}>{loc.title}</span>
                               )}
                             </div>
-                            {loc.type === "en_route" && loc.distance_m != null && (
-                              <span style={{ fontSize: 12, color: "#92400e" }}>
-                                {(loc.distance_m / 1000).toFixed(1)} km · ~{Math.round((loc.distance_m / 1000 / 60) * 60)} min
-                              </span>
-                            )}
+                            {loc.type === "en_route" && loc.distance_m != null && (() => {
+                              const distKm = loc.distance_m / 1000;
+                              const travelMin = Math.round((distKm / 60) * 60);
+                              const etaTime = new Date(Date.now() + travelMin * 60 * 1000)
+                                .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+                              return (
+                                <>
+                                  <span style={{ fontSize: 12, color: "#92400e" }}>
+                                    {distKm.toFixed(1)} km · ~{travelMin} min
+                                  </span>
+                                  <span style={{ fontSize: 11, opacity: 0.6 }}>ETA {etaTime}</span>
+                                </>
+                              );
+                            })()}
                             {loc.type === "en_route" && loc.distance_m == null && (
-                              <span style={{ fontSize: 12, color: "#94a3b8" }}>Location unknown</span>
-                            )}
-                            {loc.type === "en_route" && loc.anticipated_arrival_at && (
-                              <span style={{ fontSize: 11, opacity: 0.6 }}>
-                                ETA {new Date(loc.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              </span>
+                              <>
+                                <span style={{ fontSize: 12, color: "#94a3b8" }}>Location unknown</span>
+                                {loc.anticipated_arrival_at && (
+                                  <span style={{ fontSize: 11, opacity: 0.6 }}>
+                                    ETA {new Date(loc.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                         );
