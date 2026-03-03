@@ -354,14 +354,14 @@ export default function MembersPage() {
                               )}
                             </div>
                             {loc.type === "en_route" && loc.distance_m != null && (() => {
-                              const distKm = loc.distance_m / 1000;
-                              const travelMin = Math.round((distKm / 60) * 60);
+                              const distMi = loc.distance_m / 1609.34;
+                              const travelMin = Math.round((distMi / 37) * 60);
                               const etaTime = new Date(Date.now() + travelMin * 60 * 1000)
                                 .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
                               return (
                                 <>
                                   <span style={{ fontSize: 12, color: "#92400e" }}>
-                                    {distKm.toFixed(1)} km · ~{travelMin} min
+                                    {distMi.toFixed(1)} mi · ~{travelMin} min
                                   </span>
                                   <span style={{ fontSize: 11, opacity: 0.6 }}>ETA {etaTime}</span>
                                 </>

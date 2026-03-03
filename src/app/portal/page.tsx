@@ -293,7 +293,7 @@ export default function PortalPage() {
           setMsg(ev.id, "");
           doCheckin(ev, action);
         } else {
-          setMsg(ev.id, `You are ${Math.round(dist)} m from the activity site (max ${radius} m). Check-in blocked.`);
+          setMsg(ev.id, `You are ${Math.round(dist * 3.281)} ft from the activity site (max ${Math.round(radius * 3.281)} ft). Check-in blocked.`);
         }
       },
       (err) => {
@@ -443,7 +443,7 @@ export default function PortalPage() {
           setMsg(ev.id, "");
           doCheckin(ev, "arrive");
         } else {
-          setMsg(ev.id, `You are ${Math.round(dist)} m from the scene (max ${radius} m). Check-in blocked.`);
+          setMsg(ev.id, `You are ${Math.round(dist * 3.281)} ft from the scene (max ${Math.round(radius * 3.281)} ft). Check-in blocked.`);
         }
       },
       (err) => {
@@ -526,7 +526,7 @@ export default function PortalPage() {
                     <strong style={{ fontSize: 15 }}>{ev.title ?? "(Untitled)"}</strong>
                     {ev.incident_lat && ev.incident_lng && (
                       <span style={{ fontSize: 11, opacity: 0.6 }}>
-                        Geofenced ({ev.incident_radius_m ?? 500} m)
+                        Geofenced ({Math.round((ev.incident_radius_m ?? 500) * 3.281)} ft)
                       </span>
                     )}
                   </div>

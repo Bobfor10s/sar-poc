@@ -603,11 +603,11 @@ export default function CallDetailPage() {
                     if (isEnRoute) {
                       if (call?.incident_lat && call?.incident_lng && a.current_lat && a.current_lng) {
                         const distM = haversineMeters(a.current_lat, a.current_lng, call.incident_lat, call.incident_lng);
-                        const distKm = distM / 1000;
-                        const etaMin = Math.round((distKm / 60) * 60);
+                        const distMi = distM / 1609.34;
+                        const etaMin = Math.round((distMi / 37) * 60);
                         distEta = (
                           <span style={{ fontSize: 12, color: "#92400e" }}>
-                            {distKm.toFixed(1)} km · ~{etaMin} min
+                            {distMi.toFixed(1)} mi · ~{etaMin} min
                           </span>
                         );
                       } else {
