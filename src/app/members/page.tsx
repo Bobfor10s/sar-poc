@@ -501,6 +501,7 @@ function Th({
 }
 
 function locationLabel(type: string): string {
+  if (type === "call") return "Checked In";
   if (type === "en_route") return "En Route";
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
