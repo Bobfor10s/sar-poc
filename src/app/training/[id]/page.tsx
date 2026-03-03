@@ -672,8 +672,8 @@ export default function TrainingDetailPage() {
               <input style={inputStyle} value={editSession.incident_lng ?? ""} onChange={(e) => setEditSession({ ...editSession, incident_lng: e.target.value === "" ? null : Number(e.target.value) })} placeholder="e.g. -74.12345" />
             </div>
             <div>
-              <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Radius (m)</div>
-              <input style={inputStyle} type="number" min={50} value={editSession.incident_radius_m ?? ""} onChange={(e) => setEditSession({ ...editSession, incident_radius_m: e.target.value === "" ? null : Number(e.target.value) })} placeholder="500" />
+              <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Radius (ft)</div>
+              <input style={inputStyle} type="number" min={50} value={editSession.incident_radius_m != null ? Math.round(editSession.incident_radius_m * 3.281) : ""} onChange={(e) => setEditSession({ ...editSession, incident_radius_m: e.target.value === "" ? null : Math.round(Number(e.target.value) / 3.281) })} placeholder="1640" />
             </div>
           </div>
         </div>

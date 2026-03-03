@@ -504,14 +504,14 @@ export default function CallDetailPage() {
               </div>
               <div>
                 <label style={{ display: "block", fontSize: 11, fontWeight: 600, opacity: 0.65, marginBottom: 3 }}>
-                  Radius (m)
+                  Radius (ft)
                 </label>
                 <input
                   type="number"
                   min={50}
-                  value={call.incident_radius_m ?? ""}
-                  onChange={(e) => setCall({ ...call, incident_radius_m: e.target.value === "" ? null : Number(e.target.value) })}
-                  placeholder="500"
+                  value={call.incident_radius_m != null ? Math.round(call.incident_radius_m * 3.281) : ""}
+                  onChange={(e) => setCall({ ...call, incident_radius_m: e.target.value === "" ? null : Math.round(Number(e.target.value) / 3.281) })}
+                  placeholder="1640"
                   style={{ width: "100%", padding: "7px 8px", borderRadius: 7, border: "1px solid #ddd", fontSize: 13 }}
                 />
               </div>

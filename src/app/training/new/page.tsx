@@ -19,7 +19,7 @@ export default function NewTrainingPage() {
     visibility: "members",
     incident_lat: "",
     incident_lng: "",
-    incident_radius_m: "500",
+    incident_radius_m: "1640",
     allow_rsvp: false,
     allow_early_checkin: false,
     early_checkin_minutes: "30",
@@ -56,7 +56,7 @@ export default function NewTrainingPage() {
         visibility: form.visibility,
         incident_lat: form.incident_lat.trim() ? Number(form.incident_lat) : null,
         incident_lng: form.incident_lng.trim() ? Number(form.incident_lng) : null,
-        incident_radius_m: form.incident_radius_m.trim() ? Number(form.incident_radius_m) : null,
+        incident_radius_m: form.incident_radius_m.trim() ? Math.round(Number(form.incident_radius_m) / 3.281) : null,
         allow_rsvp: form.allow_rsvp,
         allow_early_checkin: form.allow_early_checkin,
         early_checkin_minutes: form.allow_early_checkin && form.early_checkin_minutes ? Number(form.early_checkin_minutes) : null,
@@ -148,8 +148,8 @@ export default function NewTrainingPage() {
                 <input style={inputStyle} value={form.incident_lng} onChange={(e) => setForm({ ...form, incident_lng: e.target.value })} placeholder="-74.12345" />
               </div>
               <div>
-                <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Radius (m)</div>
-                <input style={inputStyle} type="number" min={50} value={form.incident_radius_m} onChange={(e) => setForm({ ...form, incident_radius_m: e.target.value })} placeholder="500" />
+                <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Radius (ft)</div>
+                <input style={inputStyle} type="number" min={50} value={form.incident_radius_m} onChange={(e) => setForm({ ...form, incident_radius_m: e.target.value })} placeholder="1640" />
               </div>
             </div>
           </div>
