@@ -507,7 +507,7 @@ function locationLabel(type: string): string {
 
 function locationBadgeStyle(type: string): React.CSSProperties {
   const base: React.CSSProperties = { fontSize: 11, padding: "1px 7px", borderRadius: 999, fontWeight: 700, whiteSpace: "nowrap" };
-  if (type === "call")     return { ...base, background: "#fef9c3", border: "1px solid #ca8a04", color: "#713f12" };
+  if (type === "call")     return { ...base, background: "#22c55e", border: "1px solid #16a34a", color: "#fff" };
   if (type === "en_route") return { ...base, background: "#fef3c7", border: "1px solid #f59e0b", color: "#92400e" };
   if (type === "training") return { ...base, background: "#eff6ff", border: "1px solid #3b82f6", color: "#1e3a8a" };
   if (type === "meeting")  return { ...base, background: "#f0fdf4", border: "1px solid #22c55e", color: "#14532d" };
