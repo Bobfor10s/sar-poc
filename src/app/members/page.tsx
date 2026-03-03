@@ -50,7 +50,7 @@ export default function MembersPage() {
   const [rows, setRows] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string>("");
-  const [memberLocations, setMemberLocations] = useState<Record<string, { type: string; title: string; on_my_way_at?: string | null; anticipated_arrival_at?: string | null }>>({});
+  const [memberLocations, setMemberLocations] = useState<Record<string, { type: string; title: string; on_my_way_at?: string | null; anticipated_arrival_at?: string | null; distance_m?: number | null }>>({});
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [q, setQ] = useState("");
@@ -338,21 +338,26 @@ export default function MembersPage() {
                       {memberLocations[m.id] && (() => {
                         const loc = memberLocations[m.id];
                         return (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                            <span style={locationBadgeStyle(loc.type)}>
-                              {locationLabel(loc.type)}
-                            </span>
-                            {loc.title && (
-                              <span style={{ fontSize: 11, opacity: 0.65 }}>{loc.title}</span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                              <span style={locationBadgeStyle(loc.type)}>
+                                {locationLabel(loc.type)}
+                              </span>
+                              {loc.title && (
+                                <span style={{ fontSize: 12, opacity: 0.7 }}>{loc.title}</span>
+                              )}
+                            </div>
+                            {loc.type === "en_route" && loc.distance_m != null && (
+                              <span style={{ fontSize: 12, color: "#92400e" }}>
+                                {(loc.distance_m / 1000).toFixed(1)} km · ~{Math.round((loc.distance_m / 1000 / 60) * 60)} min
+                              </span>
+                            )}
+                            {loc.type === "en_route" && loc.distance_m == null && (
+                              <span style={{ fontSize: 12, color: "#94a3b8" }}>Location unknown</span>
                             )}
                             {loc.type === "en_route" && loc.anticipated_arrival_at && (
                               <span style={{ fontSize: 11, opacity: 0.6 }}>
                                 ETA {new Date(loc.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            )}
-                            {loc.type === "en_route" && !loc.anticipated_arrival_at && loc.on_my_way_at && (
-                              <span style={{ fontSize: 11, opacity: 0.6 }}>
-                                Since {new Date(loc.on_my_way_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             )}
                           </div>

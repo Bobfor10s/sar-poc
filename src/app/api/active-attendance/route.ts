@@ -2,6 +2,16 @@ import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
 import { requirePermission } from "@/lib/supabase/require-permission";
 
+function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export async function GET() {
   const check = await requirePermission("read_all");
   if (!check.ok) return check.response;
@@ -15,10 +25,10 @@ export async function GET() {
     return true;
   }
 
-  // Fetch all active activities
+  // Fetch all active activities — include incident location for calls
   const [{ data: calls }, { data: trainingSessions }, { data: meetings }, { data: events }] =
     await Promise.all([
-      supabaseDb.from("calls").select("id, title").eq("status", "open").lte("start_dt", nowIso),
+      supabaseDb.from("calls").select("id, title, incident_lat, incident_lng").eq("status", "open").lte("start_dt", nowIso),
       supabaseDb.from("training_sessions").select("id, title, start_dt, end_dt").eq("status", "scheduled").lte("start_dt", nowIso),
       supabaseDb.from("meetings").select("id, title, start_dt, end_dt").neq("status", "cancelled").neq("status", "archived").lte("start_dt", nowIso),
       supabaseDb.from("events").select("id, title, start_dt, end_dt").eq("status", "scheduled").lte("start_dt", nowIso),
@@ -49,8 +59,14 @@ export async function GET() {
 
   const results = await Promise.all(attendancePromises);
 
-  // Build map: member_id → { type, title, ... } (last wins if in multiple)
-  const locationMap: Record<string, { type: string; title: string; on_my_way_at?: string | null; anticipated_arrival_at?: string | null }> = {};
+  // Build map: member_id → location info (last wins if in multiple)
+  const locationMap: Record<string, {
+    type: string;
+    title: string;
+    on_my_way_at?: string | null;
+    anticipated_arrival_at?: string | null;
+    distance_m?: number | null;
+  }> = {};
   for (const { type, title, data } of results) {
     for (const row of data) {
       locationMap[row.member_id] = { type, title };
@@ -64,7 +80,7 @@ export async function GET() {
   const enRoutePromises = activeCalls.map(async (c) => {
     const { data } = await supabaseDb
       .from("call_attendance")
-      .select("member_id, time_in, time_out, on_my_way_at, anticipated_arrival_at")
+      .select("member_id, time_in, time_out, on_my_way_at, anticipated_arrival_at, current_lat, current_lng")
       .eq("call_id", c.id)
       .not("on_my_way_at", "is", null);
     const enRoute = (data ?? []).filter((r: any) => {
@@ -72,19 +88,29 @@ export async function GET() {
       if (r.time_out) return r.on_my_way_at > r.time_out; // re-engaging after checkout
       return true; // no time_in yet
     });
-    return { title: c.title ?? "Call", data: enRoute };
+    return {
+      title: c.title ?? "Call",
+      incident_lat: (c as any).incident_lat as number | null,
+      incident_lng: (c as any).incident_lng as number | null,
+      data: enRoute,
+    };
   });
 
   const enRouteResults = await Promise.all(enRoutePromises);
-  for (const { title, data } of enRouteResults) {
+  for (const { title, incident_lat, incident_lng, data } of enRouteResults) {
     for (const row of data) {
       // Only add if not already on-site
       if (!locationMap[row.member_id]) {
+        let distance_m: number | null = null;
+        if (incident_lat && incident_lng && row.current_lat && row.current_lng) {
+          distance_m = haversineMeters(row.current_lat, row.current_lng, incident_lat, incident_lng);
+        }
         locationMap[row.member_id] = {
           type: "en_route",
           title,
           on_my_way_at: row.on_my_way_at,
           anticipated_arrival_at: row.anticipated_arrival_at,
+          distance_m,
         };
       }
     }
