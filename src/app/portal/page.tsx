@@ -14,7 +14,7 @@ type ActiveEvent = {
   allow_early_checkin: boolean;
   early_checkin_minutes: number | null;
   start_dt: string | null;
-  my_attendance: { time_in: string | null; time_out: string | null; rsvp_at?: string | null; arrived_at?: string | null; on_my_way_at?: string | null } | null;
+  my_attendance: { time_in: string | null; time_out: string | null; rsvp_at?: string | null; arrived_at?: string | null; on_my_way_at?: string | null; anticipated_arrival_at?: string | null; prep_time_minutes?: number | null } | null;
 };
 
 type UpcomingItem = {
@@ -115,11 +115,12 @@ export default function PortalPage() {
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // Per-card state: geo error messages, override note state
+  // Per-card state: geo error messages, override note state, prep time
   const [cardMsg, setCardMsg] = useState<Record<string, string>>({});
   const [overrideNote, setOverrideNote] = useState<Record<string, string>>({});
   const [showOverride, setShowOverride] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [prepTime, setPrepTime] = useState<Record<string, string>>({});
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchIdRef = useRef<Record<string, number>>({});
@@ -328,10 +329,30 @@ export default function PortalPage() {
       const me = await meRes.json().catch(() => ({}));
       const member_id = me?.user?.id;
 
+      const prep_time_minutes = parseInt(prepTime[ev.id] ?? "0", 10) || 0;
+
+      // Try to get current GPS position for ETA calculation (best effort)
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+          );
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+        } catch { /* GPS unavailable — proceed without */ }
+      }
+
       const res = await fetch(`/api/calls/${ev.id}/attendance`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "on_my_way", member_id }),
+        body: JSON.stringify({
+          action: "on_my_way",
+          member_id,
+          ...(prep_time_minutes > 0 ? { prep_time_minutes } : {}),
+          ...(lat !== undefined ? { lat, lng } : {}),
+        }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Failed");
@@ -552,6 +573,23 @@ export default function PortalPage() {
                     </div>
                   )}
 
+                  {/* Prep time input — shown for calls before member goes en route */}
+                  {ev.type === "call" && showEngage && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <label style={{ fontSize: 12, opacity: 0.7, whiteSpace: "nowrap" }}>Prep time (min):</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="120"
+                        value={prepTime[ev.id] ?? ""}
+                        onChange={(e) => setPrepTime((prev) => ({ ...prev, [ev.id]: e.target.value }))}
+                        placeholder="0"
+                        style={{ width: 64, padding: "4px 8px", borderRadius: 6, border: "1px solid #ddd", fontSize: 13 }}
+                      />
+                      <span style={{ fontSize: 11, opacity: 0.55 }}>added to travel ETA</span>
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                     {preArrived && (
                       <span style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #fbbf24", background: "#fef9c3", color: "#92400e", fontWeight: 600, fontSize: 13 }}>
@@ -561,7 +599,7 @@ export default function PortalPage() {
                     {enRoute && !checkedIn && (
                       <>
                         <span style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #f59e0b", background: "#fef3c7", color: "#92400e", fontWeight: 600, fontSize: 13 }}>
-                          En Route
+                          En Route{att?.anticipated_arrival_at ? ` · ETA ${new Date(att.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
                         </span>
                         <button
                           onClick={() => handleImHere(ev)}

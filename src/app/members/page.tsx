@@ -50,7 +50,7 @@ export default function MembersPage() {
   const [rows, setRows] = useState<MemberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string>("");
-  const [memberLocations, setMemberLocations] = useState<Record<string, { type: string; title: string }>>({});
+  const [memberLocations, setMemberLocations] = useState<Record<string, { type: string; title: string; on_my_way_at?: string | null; anticipated_arrival_at?: string | null }>>({});
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [q, setQ] = useState("");
@@ -164,9 +164,13 @@ export default function MembersPage() {
       if (sortKey === "status") return norm(m.status ?? "");
       if (sortKey === "onsite") {
         const loc = memberLocations[m.id];
-        if (!loc) return "2";
+        if (!loc) return "5";
+        if (loc.type === "call") return "0";
         if (loc.type === "en_route") return "1";
-        return "0";
+        if (loc.type === "training") return "2";
+        if (loc.type === "meeting") return "3";
+        if (loc.type === "event") return "4";
+        return "5";
       }
       if (sortKey === "email") return norm(m.email ?? "");
       if (sortKey === "phone") return norm(m.phone ?? "");
@@ -331,11 +335,29 @@ export default function MembersPage() {
                     )}
 
                     <td style={td}>
-                      {memberLocations[m.id] && (
-                        <span style={locationBadgeStyle(memberLocations[m.id].type)}>
-                          {locationLabel(memberLocations[m.id].type)}
-                        </span>
-                      )}
+                      {memberLocations[m.id] && (() => {
+                        const loc = memberLocations[m.id];
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                            <span style={locationBadgeStyle(loc.type)}>
+                              {locationLabel(loc.type)}
+                            </span>
+                            {loc.title && (
+                              <span style={{ fontSize: 11, opacity: 0.65 }}>{loc.title}</span>
+                            )}
+                            {loc.type === "en_route" && loc.anticipated_arrival_at && (
+                              <span style={{ fontSize: 11, opacity: 0.6 }}>
+                                ETA {new Date(loc.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            )}
+                            {loc.type === "en_route" && !loc.anticipated_arrival_at && loc.on_my_way_at && (
+                              <span style={{ fontSize: 11, opacity: 0.6 }}>
+                                Since {new Date(loc.on_my_way_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     {/* Role: Searcher or land_sar typing */}

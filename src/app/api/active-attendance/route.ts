@@ -49,8 +49,8 @@ export async function GET() {
 
   const results = await Promise.all(attendancePromises);
 
-  // Build map: member_id → { type, title } (last wins if in multiple)
-  const locationMap: Record<string, { type: string; title: string }> = {};
+  // Build map: member_id → { type, title, ... } (last wins if in multiple)
+  const locationMap: Record<string, { type: string; title: string; on_my_way_at?: string | null; anticipated_arrival_at?: string | null }> = {};
   for (const { type, title, data } of results) {
     for (const row of data) {
       locationMap[row.member_id] = { type, title };
@@ -64,7 +64,7 @@ export async function GET() {
   const enRoutePromises = activeCalls.map(async (c) => {
     const { data } = await supabaseDb
       .from("call_attendance")
-      .select("member_id, time_in, time_out, on_my_way_at")
+      .select("member_id, time_in, time_out, on_my_way_at, anticipated_arrival_at")
       .eq("call_id", c.id)
       .not("on_my_way_at", "is", null);
     const enRoute = (data ?? []).filter((r: any) => {
@@ -80,7 +80,12 @@ export async function GET() {
     for (const row of data) {
       // Only add if not already on-site
       if (!locationMap[row.member_id]) {
-        locationMap[row.member_id] = { type: "en_route", title };
+        locationMap[row.member_id] = {
+          type: "en_route",
+          title,
+          on_my_way_at: row.on_my_way_at,
+          anticipated_arrival_at: row.anticipated_arrival_at,
+        };
       }
     }
   }
