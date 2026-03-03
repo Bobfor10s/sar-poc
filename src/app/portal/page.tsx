@@ -124,6 +124,7 @@ export default function PortalPage() {
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchIdRef = useRef<Record<string, number>>({});
+  const memberIdRef = useRef<string | null>(null);
 
   async function logout() {
     setLoggingOut(true);
@@ -149,6 +150,7 @@ export default function PortalPage() {
         const me = await meRes.json().catch(() => ({}));
         if (me?.user?.name) setMemberName(me.user.name);
         if (me?.user?.role) setUserRole(me.user.role);
+        if (me?.user?.id) memberIdRef.current = me.user.id;
       }
     } finally {
       setLoading(false);
@@ -321,6 +323,61 @@ export default function PortalPage() {
     doCheckin(ev, "arrive", note.trim());
   }
 
+  function startGpsWatch(ev: ActiveEvent) {
+    if (!navigator.geolocation) return;
+    if (watchIdRef.current[ev.id] != null) return; // already watching
+
+    const hasGeofence = !!(ev.incident_lat && ev.incident_lng);
+    const radius = ev.incident_radius_m ?? 500;
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        const mid = memberIdRef.current;
+
+        // Send location update (fire-and-forget)
+        if (mid) {
+          fetch(`/api/calls/${ev.id}/location`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ member_id: mid, lat, lng }),
+          }).catch(() => {});
+        }
+
+        // Auto-arrive if within geofence
+        if (hasGeofence) {
+          const dist = haversineMeters(lat, lng, ev.incident_lat!, ev.incident_lng!);
+          if (dist <= radius) {
+            navigator.geolocation.clearWatch(watchIdRef.current[ev.id]);
+            delete watchIdRef.current[ev.id];
+            await doCheckin(ev, "arrive");
+          }
+        }
+      },
+      () => {
+        setMsg(ev.id, "Could not track location. Use \u2018I\u2019m Here\u2019 when you arrive.");
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+
+    watchIdRef.current[ev.id] = watchId;
+  }
+
+  // Auto-restart GPS watch whenever events update and we detect an en-route call
+  // without an active watch (e.g. after page reload or browser killed the watch).
+  useEffect(() => {
+    for (const ev of events) {
+      if (ev.type !== "call") continue;
+      const att = ev.my_attendance;
+      if (!att?.on_my_way_at) continue;
+      const onMyWayMs = new Date(att.on_my_way_at).getTime();
+      const timeOutMs = att.time_out ? new Date(att.time_out).getTime() : 0;
+      const isEnRoute = !att.time_in || (!!att.time_out && onMyWayMs > timeOutMs);
+      if (!isEnRoute) continue;
+      startGpsWatch(ev);
+    }
+  }, [events]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleOnMyWay(ev: ActiveEvent) {
     setBusy((prev) => ({ ...prev, [ev.id]: true }));
     setMsg(ev.id, "");
@@ -328,6 +385,7 @@ export default function PortalPage() {
       const meRes = await fetch("/api/auth/me");
       const me = await meRes.json().catch(() => ({}));
       const member_id = me?.user?.id;
+      if (member_id) memberIdRef.current = member_id;
 
       const prep_time_minutes = parseInt(prepTime[ev.id] ?? "0", 10) || 0;
 
@@ -357,47 +415,13 @@ export default function PortalPage() {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json?.error ?? "Failed");
 
-      // Refresh active events
+      // Refresh active events (the useEffect on events will auto-start the watch)
       const evRes = await fetch("/api/active-events");
       if (evRes.ok) setEvents(await evRes.json().catch(() => []));
 
-      // Start GPS tracking
       if (!navigator.geolocation) {
-        setMsg(ev.id, "GPS not available — tracking disabled. Use 'I'm Here' when you arrive.");
-        return;
+        setMsg(ev.id, "GPS not available \u2014 tracking disabled. Use \u2018I\u2019m Here\u2019 when you arrive.");
       }
-
-      const hasGeofence = !!(ev.incident_lat && ev.incident_lng);
-      const radius = ev.incident_radius_m ?? 500;
-
-      const watchId = navigator.geolocation.watchPosition(
-        async (pos) => {
-          const { latitude: lat, longitude: lng } = pos.coords;
-
-          // Send location update (fire-and-forget)
-          fetch(`/api/calls/${ev.id}/location`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ member_id, lat, lng }),
-          }).catch(() => {});
-
-          // Auto-arrive if within geofence
-          if (hasGeofence) {
-            const dist = haversineMeters(lat, lng, ev.incident_lat!, ev.incident_lng!);
-            if (dist <= radius) {
-              navigator.geolocation.clearWatch(watchIdRef.current[ev.id]);
-              delete watchIdRef.current[ev.id];
-              await doCheckin(ev, "arrive");
-            }
-          }
-        },
-        () => {
-          setMsg(ev.id, "Could not track location. Use 'I'm Here' when you arrive.");
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-      );
-
-      watchIdRef.current[ev.id] = watchId;
     } catch (e: any) {
       setMsg(ev.id, e?.message ?? "Error");
     } finally {
