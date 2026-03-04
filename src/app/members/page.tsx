@@ -39,7 +39,8 @@ type SortKey =
   | "status"
   | "onsite"
   | "email"
-  | "phone";
+  | "phone"
+  | "role";
 
 function norm(v: any) {
   return String(v ?? "").trim().toLowerCase();
@@ -180,6 +181,7 @@ export default function MembersPage() {
       }
       if (sortKey === "email") return norm(m.email ?? "");
       if (sortKey === "phone") return norm(m.phone ?? "");
+      if (sortKey === "role") return norm(m.role ?? "");
       return "";
     };
 
@@ -273,7 +275,7 @@ export default function MembersPage() {
               <Th onClick={() => toggleSort("name")} active={sortKey === "name"} dir={sortDir}>
                 Name
               </Th>
-              {isAdmin && <th style={th}>Access</th>}
+              {isAdmin && <Th onClick={() => toggleSort("role")} active={sortKey === "role"} dir={sortDir}>Access</Th>}
               <Th onClick={() => toggleSort("onsite")} active={sortKey === "onsite"} dir={sortDir}>
                 Location
               </Th>
