@@ -57,7 +57,9 @@ export async function GET(req: Request) {
   const eventsTotal = totalEventsRes.count ?? 0;
   const eventsAttended = (attendedEventsRes.data ?? []).length;
 
-  const overallTotal = callsTotal + trainingTotal + meetingsTotal + eventsTotal;
+  // Events attended count toward the numerator but events are not required activities
+  // so they don't count toward the denominator (total)
+  const overallTotal = callsTotal + trainingTotal + meetingsTotal;
   const overallAttended = callsAttended + trainingAttended + meetingsAttended + eventsAttended;
 
   return NextResponse.json({
