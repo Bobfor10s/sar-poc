@@ -149,7 +149,7 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, details: error.details, hint: error.hint, code: error.code }, { status: 500 });
   }
 
   // Auto-assign SEARCHER position as qualified, dated to town approval
@@ -173,6 +173,7 @@ export async function POST(req: Request) {
     email,
     password: "welcome",
     email_confirm: true,
+    user_metadata: { display_name: `${first_name} ${last_name}`.trim() },
   });
   if (!authError && authData?.user?.id) {
     await supabaseDb.from("members").update({ user_id: authData.user.id }).eq("id", data.id);

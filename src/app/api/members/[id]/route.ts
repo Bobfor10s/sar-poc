@@ -127,6 +127,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // If email or name changed and member has an auth account, keep auth in sync
+  if (data.user_id && (patch.email || patch.first_name || patch.last_name)) {
+    const authUpdate: { email?: string; user_metadata?: { display_name: string } } = {};
+    if (patch.email) authUpdate.email = patch.email;
+    if (patch.first_name || patch.last_name) {
+      authUpdate.user_metadata = { display_name: `${data.first_name} ${data.last_name}`.trim() };
+    }
+    await supabaseDb.auth.admin.updateUserById(data.user_id, authUpdate);
+  }
+
   await logActivity(req, "edit_member", { name: `${data.first_name} ${data.last_name}`.trim() });
 
   // Auto-assign SEARCHER when approving an applicant for the first time
