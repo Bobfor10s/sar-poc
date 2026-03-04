@@ -324,7 +324,7 @@ export default function MembersPage() {
 
                     {isAdmin && (
                       <td style={td}>
-                        {m.role && m.role !== "member" && (
+                        {m.role && (
                           <span style={{
                             fontSize: 11,
                             padding: "1px 7px",
@@ -332,7 +332,9 @@ export default function MembersPage() {
                             fontWeight: 700,
                             ...(m.role === "admin"
                               ? { background: "#dbeafe", border: "1px solid #93c5fd", color: "#1e40af" }
-                              : { background: "#d1fae5", border: "1px solid #6ee7b7", color: "#065f46" }),
+                              : m.role === "viewer"
+                              ? { background: "#d1fae5", border: "1px solid #6ee7b7", color: "#065f46" }
+                              : { background: "#f1f5f9", border: "1px solid #cbd5e1", color: "#475569" }),
                           }}>
                             {m.role}
                           </span>
