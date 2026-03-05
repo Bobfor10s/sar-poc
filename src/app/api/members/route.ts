@@ -175,7 +175,9 @@ export async function POST(req: Request) {
     email_confirm: true,
     user_metadata: { display_name: `${first_name} ${last_name}`.trim() },
   });
-  if (!authError && authData?.user?.id) {
+  if (authError) {
+    console.error("[members POST] createUser error:", authError.message);
+  } else if (authData?.user?.id) {
     await supabaseDb.from("members").update({ user_id: authData.user.id }).eq("id", data.id);
     data.user_id = authData.user.id;
   }
