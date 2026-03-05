@@ -57,10 +57,13 @@ export async function GET(req: Request) {
   const eventsTotal = totalEventsRes.count ?? 0;
   const eventsAttended = (attendedEventsRes.data ?? []).length;
 
-  // Events attended count toward the numerator but events are not required activities
-  // so they don't count toward the denominator (total)
-  const overallTotal = callsTotal + trainingTotal + meetingsTotal;
-  const overallAttended = callsAttended + trainingAttended + meetingsAttended + eventsAttended;
+  // Required: calls + training + meetings only (no events)
+  const requiredTotal = callsTotal + trainingTotal + meetingsTotal;
+  const requiredAttended = callsAttended + trainingAttended + meetingsAttended;
+
+  // Overall: same denominator but events attended count toward numerator
+  const overallTotal = requiredTotal;
+  const overallAttended = requiredAttended + eventsAttended;
 
   return NextResponse.json({
     window_days: windowDays,
@@ -68,6 +71,7 @@ export async function GET(req: Request) {
     training: { attended: trainingAttended, total: trainingTotal, pct: pct(trainingAttended, trainingTotal) },
     meetings: { attended: meetingsAttended, total: meetingsTotal, pct: pct(meetingsAttended, meetingsTotal) },
     events: { attended: eventsAttended, total: eventsTotal, pct: pct(eventsAttended, eventsTotal) },
+    required: { attended: requiredAttended, total: requiredTotal, pct: pct(requiredAttended, requiredTotal) },
     overall: { attended: overallAttended, total: overallTotal, pct: pct(overallAttended, overallTotal) },
   });
 }

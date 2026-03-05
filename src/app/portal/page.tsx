@@ -45,6 +45,7 @@ type Stats = {
   training: { attended: number; total: number; pct: number };
   meetings: { attended: number; total: number; pct: number };
   events: { attended: number; total: number; pct: number };
+  required: { attended: number; total: number; pct: number };
   overall: { attended: number; total: number; pct: number };
 };
 
@@ -822,17 +823,17 @@ export default function PortalPage() {
             </span>
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-            {(["calls", "training", "meetings", "events", "overall"] as const).map((cat) => {
+            {(["calls", "training", "meetings", "events", "required", "overall"] as const).map((cat) => {
               const s = stats[cat];
-              const label = cat === "overall" ? "Overall" : cat === "events" ? "Other" : cat.charAt(0).toUpperCase() + cat.slice(1);
+              const label = cat === "overall" ? "Overall (w/ Other)" : cat === "required" ? "Overall" : cat === "events" ? "Other" : cat.charAt(0).toUpperCase() + cat.slice(1);
               return (
                 <div
                   key={cat}
                   style={{
                     padding: "12px 14px",
-                    border: `1px solid ${cat === "overall" ? "#94a3b8" : "#e5e5e5"}`,
+                    border: `1px solid ${cat === "required" || cat === "overall" ? "#94a3b8" : "#e5e5e5"}`,
                     borderRadius: 10,
-                    background: cat === "overall" ? "#f8fafc" : "#fff",
+                    background: cat === "required" || cat === "overall" ? "#f8fafc" : "#fff",
                   }}
                 >
                   <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6, fontWeight: 600 }}>{label}</div>
