@@ -102,8 +102,8 @@ export default function NewEventPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 600 }}>
-      <a href="/events" style={{ fontSize: 13, color: "#2563eb", textDecoration: "none" }}>← Back to Events</a>
-      <h1 style={{ margin: "12px 0 24px" }}>Add Event</h1>
+      <a href="/events" style={{ fontSize: 13, color: "#2563eb", textDecoration: "none" }}>← Back to Other</a>
+      <h1 style={{ margin: "12px 0 24px" }}>Add Other</h1>
 
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 16 }}>
         <div style={{ display: "grid", gap: 4 }}>
@@ -226,7 +226,7 @@ export default function NewEventPage() {
             disabled={busy || !form.title.trim() || !form.start_date}
             style={{ padding: "10px 24px", background: busy ? "#94a3b8" : "#1e40af", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer" }}
           >
-            {busy ? "Creating…" : "Create Event"}
+            {busy ? "Creating…" : "Create"}
           </button>
           <button type="button" onClick={() => router.push("/events")} style={{ padding: "10px 24px", background: "#f1f5f9", border: "1px solid #ddd", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
             Cancel

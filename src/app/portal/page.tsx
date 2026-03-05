@@ -66,7 +66,7 @@ function typeLabel(type: string) {
   if (type === "call") return "Call";
   if (type === "training") return "Training";
   if (type === "meeting") return "Meeting";
-  if (type === "event") return "Event";
+  if (type === "event") return "Other";
   return type;
 }
 
@@ -824,7 +824,7 @@ export default function PortalPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
             {(["calls", "training", "meetings", "events", "overall"] as const).map((cat) => {
               const s = stats[cat];
-              const label = cat === "overall" ? "Overall" : cat.charAt(0).toUpperCase() + cat.slice(1);
+              const label = cat === "overall" ? "Overall" : cat === "events" ? "Other" : cat.charAt(0).toUpperCase() + cat.slice(1);
               return (
                 <div
                   key={cat}

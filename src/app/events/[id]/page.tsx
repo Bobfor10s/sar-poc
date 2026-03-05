@@ -171,7 +171,7 @@ export default function EventDetailPage() {
 
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 900 }}>
-      <p style={{ margin: "0 0 4px" }}><a href="/events" style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}>← Back to Events</a></p>
+      <p style={{ margin: "0 0 4px" }}><a href="/events" style={{ color: "#2563eb", textDecoration: "none", fontSize: 13 }}>← Back to Other</a></p>
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
         <h1 style={{ margin: 0 }}>{event?.title ?? "Event"}</h1>

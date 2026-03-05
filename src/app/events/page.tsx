@@ -81,7 +81,7 @@ export default function EventsPage() {
   return (
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
-        <h1 style={{ margin: 0 }}>Events</h1>
+        <h1 style={{ margin: 0 }}>Other</h1>
         {isAdmin && (
           <Link
             href="/events/new"
@@ -95,7 +95,7 @@ export default function EventsPage() {
               display: "inline-block",
             }}
           >
-            + Add Event
+            + Add Other
           </Link>
         )}
       </div>
@@ -113,7 +113,7 @@ export default function EventsPage() {
       {loading ? (
         <p style={{ opacity: 0.7, marginTop: 16 }}>Loading…</p>
       ) : visible.length === 0 ? (
-        <p style={{ opacity: 0.7, marginTop: 16 }}>No events yet.</p>
+        <p style={{ opacity: 0.7, marginTop: 16 }}>No items yet.</p>
       ) : (
         <ul style={{ marginTop: 16, listStyle: "none", padding: 0 }}>
           {visible.map((ev) => {

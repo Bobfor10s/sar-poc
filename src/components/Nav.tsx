@@ -35,7 +35,7 @@ export default function Nav() {
     { href: "/calls", label: "Calls", perm: "read_all" },
     { href: "/training", label: "Training", perm: "read_all" },
     { href: "/meetings", label: "Meetings", perm: "read_all" },
-    { href: "/events", label: "Events", perm: "read_all" },
+    { href: "/events", label: "Other", perm: "read_all" },
   ];
 
   const positionsLinks = [
