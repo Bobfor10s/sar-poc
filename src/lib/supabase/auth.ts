@@ -9,6 +9,7 @@ export type AuthContext = {
     email: string | null;
     role: string;
     status: string;
+    joined_at: string | null;
     user_id: string;
   };
   role: string;
@@ -64,6 +65,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       email: member.email ?? null,
       role: member.role,
       status: member.status,
+      joined_at: member.joined_at ?? null,
       user_id: member.user_id,
     },
     role: effectiveRole,

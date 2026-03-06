@@ -15,6 +15,7 @@ export async function GET() {
       email: auth.member.email,
       role: auth.role,
       status: auth.member.status,
+      is_applicant: !auth.member.joined_at,
       permissions: auth.permissions,
     },
   });
