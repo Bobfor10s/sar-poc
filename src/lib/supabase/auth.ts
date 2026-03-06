@@ -32,15 +32,16 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   // Fetch member linked to this auth user
   const { data: member, error: memberErr } = await supabaseDb
     .from("members")
-    .select("id, first_name, last_name, email, role, status, user_id")
+    .select("id, first_name, last_name, email, role, status, joined_at, user_id")
     .eq("user_id", user.id)
     .single();
 
   if (memberErr || !member) return null;
 
-  // Inactive members are treated as basic "member" role regardless of stored role,
-  // so their actual role is preserved and restored when they become active again.
-  const effectiveRole = member.status === "inactive" ? "member" : member.role;
+  // Applicants (no joined_at) and inactive members are capped at "member" role
+  // so their stored role is preserved and takes effect once they're approved/active.
+  const isApplicant = !member.joined_at;
+  const effectiveRole = (member.status === "inactive" || isApplicant) ? "member" : member.role;
 
   // Fetch permissions for this role via role_permissions join
   const { data: roleRows, error: roleErr } = await supabaseDb
