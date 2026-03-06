@@ -113,6 +113,7 @@ export default function PortalPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [memberName, setMemberName] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
+  const [memberStatus, setMemberStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -151,6 +152,7 @@ export default function PortalPage() {
         const me = await meRes.json().catch(() => ({}));
         if (me?.user?.name) setMemberName(me.user.name);
         if (me?.user?.role) setUserRole(me.user.role);
+        if (me?.user?.status) setMemberStatus(me.user.status);
         if (me?.user?.id) memberIdRef.current = me.user.id;
       }
     } finally {
@@ -505,7 +507,15 @@ export default function PortalPage() {
       )}
 
       {loading && <p style={{ opacity: 0.6, fontSize: 14 }}>Loading…</p>}
-      {!loading && <>
+
+      {/* Inactive members: show notice only — no events, stats, history */}
+      {!loading && memberStatus === "inactive" && (
+        <div style={{ padding: "14px 18px", background: "#fef9c3", border: "1px solid #fcd34d", borderRadius: 10, marginBottom: 20, fontSize: 14 }}>
+          <strong>Your membership is currently inactive.</strong> You can still update your contact information below. Full access will be restored when your membership is reactivated.
+        </div>
+      )}
+
+      {!loading && memberStatus !== "inactive" && <>
 
       {/* Active Events */}
       <section>
@@ -866,10 +876,13 @@ export default function PortalPage() {
         </section>
       )}
 
-      {/* My Profile */}
-      <ProfileSection />
+      </>}
 
-      {/* Activity History */}
+      {/* My Profile — always visible regardless of status */}
+      {!loading && <ProfileSection />}
+
+      {/* Activity History — active members only */}
+      {!loading && memberStatus !== "inactive" && (
       <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 18, marginBottom: 12 }}>Activity History</h2>
         {history.length === 0 ? (
@@ -903,7 +916,7 @@ export default function PortalPage() {
           </div>
         )}
       </section>
-      </>}
+      )}
     </main>
   );
 }

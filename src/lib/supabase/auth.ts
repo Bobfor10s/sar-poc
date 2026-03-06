@@ -8,6 +8,7 @@ export type AuthContext = {
     last_name: string;
     email: string | null;
     role: string;
+    status: string;
     user_id: string;
   };
   role: string;
@@ -61,6 +62,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       last_name: member.last_name,
       email: member.email ?? null,
       role: member.role,
+      status: member.status,
       user_id: member.user_id,
     },
     role: effectiveRole,

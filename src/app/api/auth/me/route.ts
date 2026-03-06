@@ -14,6 +14,7 @@ export async function GET() {
       name: `${auth.member.first_name} ${auth.member.last_name}`,
       email: auth.member.email,
       role: auth.role,
+      status: auth.member.status,
       permissions: auth.permissions,
     },
   });
