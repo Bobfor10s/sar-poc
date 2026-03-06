@@ -31,17 +31,21 @@ export async function getAuthContext(): Promise<AuthContext | null> {
   // Fetch member linked to this auth user
   const { data: member, error: memberErr } = await supabaseDb
     .from("members")
-    .select("id, first_name, last_name, email, role, user_id")
+    .select("id, first_name, last_name, email, role, status, user_id")
     .eq("user_id", user.id)
     .single();
 
   if (memberErr || !member) return null;
 
+  // Inactive members are treated as basic "member" role regardless of stored role,
+  // so their actual role is preserved and restored when they become active again.
+  const effectiveRole = member.status === "inactive" ? "member" : member.role;
+
   // Fetch permissions for this role via role_permissions join
   const { data: roleRows, error: roleErr } = await supabaseDb
     .from("roles")
     .select("id, role_permissions(permission_key)")
-    .eq("name", member.role)
+    .eq("name", effectiveRole)
     .single();
 
   if (roleErr || !roleRows) return null;
@@ -59,7 +63,7 @@ export async function getAuthContext(): Promise<AuthContext | null> {
       role: member.role,
       user_id: member.user_id,
     },
-    role: member.role,
+    role: effectiveRole,
     permissions,
   };
 }
