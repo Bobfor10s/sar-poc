@@ -34,6 +34,7 @@ type Course = {
   valid_months: number;
   warning_days: number;
   is_active: boolean;
+  never_expires: boolean;
 };
 
 type CertRow = {
