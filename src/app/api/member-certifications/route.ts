@@ -55,16 +55,33 @@ export async function POST(req: Request) {
   }
   const course_id = String(body.course_id ?? "").trim();
   const completed_at = String(body.completed_at ?? "").trim(); // yyyy-mm-dd
-  const expires_at = String(body.expires_at ?? "").trim();     // yyyy-mm-dd
 
-  if (!member_id || !course_id || !completed_at || !expires_at) {
+  if (!member_id || !course_id || !completed_at) {
     return NextResponse.json(
-      { error: "member_id, course_id, completed_at, expires_at are required" },
+      { error: "member_id, course_id, completed_at are required" },
       { status: 400 }
     );
   }
 
-  const payload: any = {
+  // Look up never_expires flag — if set, expires_at must be null regardless of what was sent
+  const { data: course } = await supabaseDb
+    .from("courses")
+    .select("never_expires")
+    .eq("id", course_id)
+    .single();
+
+  const expires_at = course?.never_expires
+    ? null
+    : (String(body.expires_at ?? "").trim() || null);
+
+  if (!course?.never_expires && !expires_at) {
+    return NextResponse.json(
+      { error: "expires_at is required for courses that expire" },
+      { status: 400 }
+    );
+  }
+
+  const payload: Record<string, unknown> = {
     member_id,
     course_id,
     completed_at,

@@ -40,7 +40,7 @@ type CertRow = {
   id: string;
   course_id: string;
   completed_at: string;
-  expires_at: string;
+  expires_at: string | null;
   courses?: { code: string; name: string; never_expires: boolean } | null;
 };
 
@@ -133,6 +133,7 @@ export default function MemberDetailPage() {
 
   const computedExpires = useMemo(() => {
     if (!selectedCourse || !certForm.completed_at) return "";
+    if (selectedCourse.never_expires) return "Never";
     return addMonths(certForm.completed_at, selectedCourse.valid_months);
   }, [selectedCourse, certForm.completed_at]);
 
@@ -279,7 +280,7 @@ export default function MemberDetailPage() {
 
   async function addCertification(e: React.FormEvent) {
     e.preventDefault();
-    if (!member || !certForm.course_id || !certForm.completed_at || !computedExpires) return;
+    if (!member || !certForm.course_id || !certForm.completed_at || !selectedCourse) return;
 
     setBusy(true);
     setMsg("");
@@ -783,7 +784,7 @@ export default function MemberDetailPage() {
 
               <div style={{ opacity: 0.85, fontSize: 13 }}>
                 Expires: <strong>{computedExpires || "—"}</strong>
-                {selectedCourse ? ` (valid ${selectedCourse.valid_months} months)` : ""}
+                {selectedCourse && !selectedCourse.never_expires ? ` (valid ${selectedCourse.valid_months} months)` : ""}
               </div>
 
               <button type="submit" disabled={busy || !certForm.course_id || !certForm.completed_at}>
@@ -799,7 +800,7 @@ export default function MemberDetailPage() {
             <ul>
               {history.map((r) => (
                 <li key={r.id}>
-                  {(r.courses?.code ?? r.course_id)} — completed {r.completed_at} → expires {r.expires_at}
+                  {(r.courses?.code ?? r.course_id)} — completed {r.completed_at} → expires {r.courses?.never_expires ? "Never" : (r.expires_at ?? "—")}
                 </li>
               ))}
             </ul>
