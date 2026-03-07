@@ -32,7 +32,7 @@ export default function NewEventPage() {
     visibility: "members",
     incident_lat: "",
     incident_lng: "",
-    incident_radius_m: "1640",
+    incident_radius_m: "300",
     allow_rsvp: false,
     allow_early_checkin: false,
     early_checkin_minutes: "30",
@@ -184,7 +184,7 @@ export default function NewEventPage() {
               </div>
               <div>
                 <div style={{ fontSize: 11, opacity: 0.65, marginBottom: 3 }}>Radius (ft)</div>
-                <input style={inputStyle} type="number" min={50} value={form.incident_radius_m} onChange={(e) => setForm({ ...form, incident_radius_m: e.target.value })} placeholder="1640" />
+                <input style={inputStyle} type="number" min={50} value={form.incident_radius_m} onChange={(e) => setForm({ ...form, incident_radius_m: e.target.value })} placeholder="300" />
               </div>
             </div>
           </div>

@@ -10,7 +10,7 @@ export default function NewCallPage() {
     location_text: "",
     incident_lat: "",
     incident_lng: "",
-    incident_radius_m: "1640",
+    incident_radius_m: "300",
     summary: "",
   });
   const [busy, setBusy] = useState(false);
@@ -167,7 +167,7 @@ export default function NewCallPage() {
             <input
               type="number"
               min={50}
-              placeholder="1640"
+              placeholder="300"
               value={form.incident_radius_m}
               onChange={(e) => setForm({ ...form, incident_radius_m: e.target.value })}
               style={{ width: 140, padding: "8px 10px", borderRadius: 8, border: "1px solid #ddd", fontSize: 14 }}

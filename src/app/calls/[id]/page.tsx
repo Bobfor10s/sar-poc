@@ -511,7 +511,7 @@ export default function CallDetailPage() {
                   min={50}
                   value={call.incident_radius_m != null ? Math.round(call.incident_radius_m * 3.281) : ""}
                   onChange={(e) => setCall({ ...call, incident_radius_m: e.target.value === "" ? null : Math.round(Number(e.target.value) / 3.281) })}
-                  placeholder="1640"
+                  placeholder="300"
                   style={{ width: "100%", padding: "7px 8px", borderRadius: 7, border: "1px solid #ddd", fontSize: 13 }}
                 />
               </div>
