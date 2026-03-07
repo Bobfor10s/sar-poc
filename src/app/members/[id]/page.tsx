@@ -94,6 +94,12 @@ function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+function fmtDate(d: string | null | undefined): string {
+  if (!d) return "—";
+  const [y, m, day] = d.split("-");
+  return `${m}/${day}/${y}`;
+}
+
 function addMonths(dateStr: string, months: number) {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(y, m - 1, d);
@@ -800,7 +806,7 @@ export default function MemberDetailPage() {
             <ul>
               {history.map((r) => (
                 <li key={r.id}>
-                  {(r.courses?.code ?? r.course_id)} — completed {r.completed_at} → expires - {r.courses?.never_expires ? "Never" : (r.expires_at ?? "—")}
+                  {(r.courses?.code ?? r.course_id)} — completed {fmtDate(r.completed_at)} → expires - {r.courses?.never_expires ? "Never" : fmtDate(r.expires_at)}
                 </li>
               ))}
             </ul>
