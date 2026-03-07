@@ -800,7 +800,7 @@ export default function MemberDetailPage() {
             <ul>
               {history.map((r) => (
                 <li key={r.id}>
-                  {(r.courses?.code ?? r.course_id)} — completed {r.completed_at} → expires {r.courses?.never_expires ? "Never" : (r.expires_at ?? "—")}
+                  {(r.courses?.code ?? r.course_id)} — completed {r.completed_at} → expires - {r.courses?.never_expires ? "Never" : (r.expires_at ?? "—")}
                 </li>
               ))}
             </ul>
