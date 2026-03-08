@@ -131,7 +131,8 @@ export default function CallNavMap({ ev, onClose, onImHere }: CallNavMapProps) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${ev.incident_lat},${ev.incident_lng}&travelmode=driving`;
+  const appleMapsUrl = `maps://?daddr=${ev.incident_lat},${ev.incident_lng}`;
+  const googleMapsUrl = `comgooglemaps://?daddr=${ev.incident_lat},${ev.incident_lng}&directionsmode=driving`;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1000, display: "flex", flexDirection: "column", background: "#fff" }}>
@@ -160,18 +161,22 @@ export default function CallNavMap({ ev, onClose, onImHere }: CallNavMapProps) {
       <div ref={mapDivRef} style={{ flex: 1 }} />
 
       {/* Bottom bar */}
-      <div style={{ display: "flex", gap: 10, padding: "12px 16px", background: "#fff", borderTop: "1px solid #e5e5e5", flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 8, padding: "12px 16px", background: "#fff", borderTop: "1px solid #e5e5e5", flexShrink: 0 }}>
         <a
-          href={navUrl}
-          target="_blank"
-          rel="noreferrer"
-          style={{ flex: 1, padding: "11px 16px", borderRadius: 8, background: "#eff6ff", border: "1px solid #3b82f6", color: "#1e40af", fontWeight: 600, fontSize: 13, textAlign: "center", textDecoration: "none" }}
+          href={appleMapsUrl}
+          style={{ flex: 1, padding: "11px 10px", borderRadius: 8, background: "#f0fdf4", border: "1px solid #86efac", color: "#15803d", fontWeight: 600, fontSize: 12, textAlign: "center", textDecoration: "none" }}
         >
-          Open in Google Maps →
+          Apple Maps
+        </a>
+        <a
+          href={googleMapsUrl}
+          style={{ flex: 1, padding: "11px 10px", borderRadius: 8, background: "#eff6ff", border: "1px solid #3b82f6", color: "#1e40af", fontWeight: 600, fontSize: 12, textAlign: "center", textDecoration: "none" }}
+        >
+          Google Maps
         </a>
         <button
           onClick={onImHere}
-          style={{ flex: 1, padding: "11px 16px", borderRadius: 8, background: "#dcfce7", border: "1px solid #86efac", color: "#15803d", fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+          style={{ flex: 1, padding: "11px 10px", borderRadius: 8, background: "#dcfce7", border: "1px solid #86efac", color: "#15803d", fontWeight: 600, fontSize: 12, cursor: "pointer" }}
         >
           I'm Here
         </button>
