@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+
+const CallNavMap = dynamic(() => import("@/components/CallNavMap"), { ssr: false });
 
 type ActiveEvent = {
   type: "call" | "training" | "meeting" | "event";
@@ -125,6 +128,7 @@ export default function PortalPage() {
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [prepTime, setPrepTime] = useState<Record<string, string>>({});
   const [liveDistM, setLiveDistM] = useState<Record<string, number>>({});
+  const [navCall, setNavCall] = useState<ActiveEvent | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchIdRef = useRef<Record<string, number>>({});
@@ -372,10 +376,17 @@ export default function PortalPage() {
 
   // Auto-restart GPS watch whenever events update and we detect an en-route call
   // without an active watch (e.g. after page reload or browser killed the watch).
+  // Also close the nav map if the member has now arrived.
   useEffect(() => {
     for (const ev of events) {
       if (ev.type !== "call") continue;
       const att = ev.my_attendance;
+
+      // Close nav map if this call's member has arrived
+      if (navCall && ev.id === navCall.id && att?.time_in) {
+        setNavCall(null);
+      }
+
       if (!att?.on_my_way_at) continue;
       const onMyWayMs = new Date(att.on_my_way_at).getTime();
       const timeOutMs = att.time_out ? new Date(att.time_out).getTime() : 0;
@@ -426,7 +437,10 @@ export default function PortalPage() {
       const evRes = await fetch("/api/active-events");
       if (evRes.ok) setEvents(await evRes.json().catch(() => []));
 
-      if (!navigator.geolocation) {
+      // Open map if call has an incident location
+      if (ev.incident_lat && ev.incident_lng) {
+        setNavCall(ev);
+      } else if (!navigator.geolocation) {
         setMsg(ev.id, "GPS not available \u2014 tracking disabled. Use \u2018I\u2019m Here\u2019 when you arrive.");
       }
     } catch (e: any) {
@@ -492,6 +506,14 @@ export default function PortalPage() {
   }
 
   return (
+    <>
+    {navCall && (
+      <CallNavMap
+        ev={navCall}
+        onClose={() => setNavCall(null)}
+        onImHere={() => { handleImHere(navCall); setNavCall(null); }}
+      />
+    )}
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
       {/* Members: full portal header with logout. Admins/viewers: simple heading (Nav handles name + logout) */}
       {userRole === "member" && (
@@ -927,6 +949,7 @@ export default function PortalPage() {
       </section>
       )}
     </main>
+    </>
   );
 }
 
