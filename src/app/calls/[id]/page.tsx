@@ -620,39 +620,41 @@ export default function CallDetailPage() {
                     return (
                       <tr key={a.id} style={rowStyle}>
                         <td style={tdStyle}>
-                          {wasEnRoute && (
-                            <span
-                              style={{
-                                marginRight: 6,
-                                fontSize: 11,
-                                padding: "1px 7px",
-                                borderRadius: 999,
-                                background: "#f1f5f9",
-                                border: "1px solid #cbd5e1",
-                                color: "#475569",
-                                fontWeight: 600,
-                              }}
-                            >
-                              {a.checkin_override_note}
-                            </span>
-                          )}
-                          <strong>{memberName(a.member_id)}</strong>
-                          {isEnRoute && (
-                            <span
-                              style={{
-                                marginLeft: 8,
-                                fontSize: 11,
-                                padding: "1px 7px",
-                                borderRadius: 999,
-                                background: "#fef3c7",
-                                border: "1px solid #f59e0b",
-                                color: "#92400e",
-                                fontWeight: 600,
-                              }}
-                            >
-                              En Route
-                            </span>
-                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "nowrap" }}>
+                            <strong style={{ whiteSpace: "nowrap" }}>{memberName(a.member_id)}</strong>
+                            {isEnRoute && (
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  padding: "1px 7px",
+                                  borderRadius: 999,
+                                  background: "#fef3c7",
+                                  border: "1px solid #f59e0b",
+                                  color: "#92400e",
+                                  fontWeight: 600,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                En Route
+                              </span>
+                            )}
+                            {wasEnRoute && (
+                              <span
+                                style={{
+                                  fontSize: 11,
+                                  padding: "1px 7px",
+                                  borderRadius: 999,
+                                  background: "#f1f5f9",
+                                  border: "1px solid #cbd5e1",
+                                  color: "#475569",
+                                  fontWeight: 600,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {a.checkin_override_note}
+                              </span>
+                            )}
+                          </div>
                           {a.time_in && !a.time_out && (
                             <span
                               style={{
