@@ -41,6 +41,7 @@ type Attendance = {
   current_lat?: number | null;
   current_lng?: number | null;
   location_updated_at?: string | null;
+  checkin_override_note?: string | null;
   periods?: AttendancePeriod[];
 };
 
@@ -593,7 +594,8 @@ export default function CallDetailPage() {
                     const isDirty =
                       edit.time_in !== toDatetimeLocal(a.time_in) ||
                       edit.time_out !== toDatetimeLocal(a.time_out);
-                    const isEnRoute = a.on_my_way_at && !a.time_in;
+                    const isEnRoute = a.on_my_way_at && !a.time_in && call?.status === "open";
+                    const wasEnRoute = !!a.checkin_override_note?.startsWith("En Route");
                     const rowStyle: React.CSSProperties = isEnRoute
                       ? { background: "#fef9c3", borderLeft: "3px solid #f59e0b" }
                       : {};
@@ -633,6 +635,22 @@ export default function CallDetailPage() {
                               }}
                             >
                               En Route
+                            </span>
+                          )}
+                          {wasEnRoute && (
+                            <span
+                              style={{
+                                marginLeft: 8,
+                                fontSize: 11,
+                                padding: "1px 7px",
+                                borderRadius: 999,
+                                background: "#f1f5f9",
+                                border: "1px solid #cbd5e1",
+                                color: "#475569",
+                                fontWeight: 600,
+                              }}
+                            >
+                              {a.checkin_override_note}
                             </span>
                           )}
                           {a.time_in && !a.time_out && (

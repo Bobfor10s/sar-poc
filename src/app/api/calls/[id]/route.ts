@@ -165,15 +165,46 @@ export async function PATCH(req: Request, ctx: any) {
 
   await logActivity(req, "edit_call", { title: updated.title });
 
-  // When closing a call, auto-clear any members still checked in
-  if (update.status === "closed") {
+  // When closing or cancelling a call, auto-clear checked-in members and stamp en-route members
+  if (update.status === "closed" || update.status === "cancelled") {
     const now = update.end_dt ?? new Date().toISOString();
+
+    // Auto-clear members still on site
     await supabaseDb
       .from("call_attendance")
       .update({ time_out: now })
       .eq("call_id", id)
       .not("time_in", "is", null)
       .is("time_out", null);
+
+    // Stamp en-route members: use on_my_way_at as time_in, now as time_out
+    const note = update.status === "cancelled" ? "En Route at Cancel" : "En Route at Close";
+    const { data: enRouteRows } = await supabaseDb
+      .from("call_attendance")
+      .select("id, member_id, on_my_way_at")
+      .eq("call_id", id)
+      .not("on_my_way_at", "is", null)
+      .is("time_in", null);
+
+    if (enRouteRows && enRouteRows.length > 0) {
+      await Promise.all([
+        ...enRouteRows.map((r) =>
+          supabaseDb.from("call_attendance").update({
+            time_in: r.on_my_way_at,
+            time_out: now,
+            checkin_override_note: note,
+          }).eq("id", r.id)
+        ),
+        supabaseDb.from("call_attendance_periods").insert(
+          enRouteRows.map((r) => ({
+            call_id: id,
+            member_id: r.member_id,
+            time_in: r.on_my_way_at,
+            time_out: now,
+          }))
+        ),
+      ]);
+    }
   }
 
   return NextResponse.json({ data: updated });
