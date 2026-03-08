@@ -664,7 +664,7 @@ export default function PortalPage() {
                       <>
                         <span style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #f59e0b", background: "#fef3c7", color: "#92400e", fontWeight: 600, fontSize: 13 }}>
                           En Route
-                          {liveDistM[ev.id] != null ? ` · ${(liveDistM[ev.id] / 1609.34).toFixed(1)} mi` : ""}
+                          {liveDistM[ev.id] != null ? ` · ${liveDistM[ev.id] < 161 ? `${Math.round(liveDistM[ev.id] * 3.281)} ft` : `${(liveDistM[ev.id] / 1609.34).toFixed(1)} mi`}` : ""}
                           {att?.anticipated_arrival_at ? ` · ETA ${new Date(att.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
                         </span>
                         <button
