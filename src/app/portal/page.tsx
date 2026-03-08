@@ -683,6 +683,23 @@ export default function PortalPage() {
                         >
                           {isBusy ? "…" : "I\u2019m Here"}
                         </button>
+                        {ev.incident_lat && ev.incident_lng && (
+                          <button
+                            onClick={() => setNavCall(ev)}
+                            style={{
+                              padding: "7px 16px",
+                              borderRadius: 8,
+                              border: "1px solid #3b82f6",
+                              background: "#eff6ff",
+                              color: "#1e40af",
+                              fontWeight: 600,
+                              fontSize: 13,
+                              cursor: "pointer",
+                            }}
+                          >
+                            View Map
+                          </button>
+                        )}
                       </>
                     )}
                     {showEngage && !isShowOverride && (
