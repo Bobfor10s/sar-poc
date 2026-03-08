@@ -133,6 +133,7 @@ export default function CallDetailPage() {
   const [busy, setBusy] = useState("");
   const [err, setErr] = useState("");
   const [closing, setClosing] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [geoSaveMsg, setGeoSaveMsg] = useState("");
 
@@ -330,6 +331,25 @@ export default function CallDetailPage() {
     }
   }
 
+  async function reopenCall() {
+    if (!call) return;
+    setReopening(true);
+    try {
+      const res = await fetch(`/api/calls/${callId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "open" }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Reopen failed");
+      setCall(json?.data ?? call);
+    } catch (e: unknown) {
+      alert((e as Error)?.message ?? String(e));
+    } finally {
+      setReopening(false);
+    }
+  }
+
   async function closeCall() {
     if (!call) return;
     setClosing(true);
@@ -446,6 +466,25 @@ export default function CallDetailPage() {
                   }}
                 >
                   {closing ? "Closing…" : "Close Call"}
+                </button>
+              )}
+              {isClosed && canEdit && (
+                <button
+                  type="button"
+                  onClick={reopenCall}
+                  disabled={reopening}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #16a34a",
+                    background: "#f0fdf4",
+                    color: "#15803d",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  {reopening ? "Reopening…" : "Reopen Call"}
                 </button>
               )}
             </div>
