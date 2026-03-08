@@ -124,6 +124,7 @@ export default function PortalPage() {
   const [showOverride, setShowOverride] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [prepTime, setPrepTime] = useState<Record<string, string>>({});
+  const [liveDistM, setLiveDistM] = useState<Record<string, number>>({});
 
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchIdRef = useRef<Record<string, number>>({});
@@ -349,9 +350,10 @@ export default function PortalPage() {
           }).catch(() => {});
         }
 
-        // Auto-arrive if within geofence
+        // Update live distance display
         if (hasGeofence) {
           const dist = haversineMeters(lat, lng, ev.incident_lat!, ev.incident_lng!);
+          setLiveDistM((prev) => ({ ...prev, [ev.id]: dist }));
           if (dist <= radius) {
             navigator.geolocation.clearWatch(watchIdRef.current[ev.id]);
             delete watchIdRef.current[ev.id];
@@ -639,7 +641,9 @@ export default function PortalPage() {
                     {enRoute && !checkedIn && (
                       <>
                         <span style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid #f59e0b", background: "#fef3c7", color: "#92400e", fontWeight: 600, fontSize: 13 }}>
-                          En Route{att?.anticipated_arrival_at ? ` · ETA ${new Date(att.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+                          En Route
+                          {liveDistM[ev.id] != null ? ` · ${(liveDistM[ev.id] / 1609.34).toFixed(1)} mi` : ""}
+                          {att?.anticipated_arrival_at ? ` · ETA ${new Date(att.anticipated_arrival_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
                         </span>
                         <button
                           onClick={() => handleImHere(ev)}
