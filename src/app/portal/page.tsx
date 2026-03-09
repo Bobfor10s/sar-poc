@@ -450,6 +450,36 @@ export default function PortalPage() {
     }
   }
 
+  async function handleCancelEnRoute(ev: ActiveEvent) {
+    // Stop GPS watch and close map
+    if (watchIdRef.current[ev.id] != null) {
+      navigator.geolocation?.clearWatch(watchIdRef.current[ev.id]);
+      delete watchIdRef.current[ev.id];
+    }
+    setNavCall(null);
+    setLiveDistM((prev) => { const n = { ...prev }; delete n[ev.id]; return n; });
+    setBusy((prev) => ({ ...prev, [ev.id]: true }));
+    setMsg(ev.id, "");
+    try {
+      const meRes = await fetch("/api/auth/me");
+      const me = await meRes.json().catch(() => ({}));
+      const member_id = me?.user?.id;
+      const res = await fetch(`/api/calls/${ev.id}/attendance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_en_route", member_id }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error ?? "Failed");
+      const evRes = await fetch("/api/active-events");
+      if (evRes.ok) setEvents(await evRes.json().catch(() => []));
+    } catch (e: any) {
+      setMsg(ev.id, e?.message ?? "Error");
+    } finally {
+      setBusy((prev) => ({ ...prev, [ev.id]: false }));
+    }
+  }
+
   async function handleImHere(ev: ActiveEvent) {
     // Stop GPS watch
     if (watchIdRef.current[ev.id] != null) {
@@ -700,6 +730,22 @@ export default function PortalPage() {
                             View Map
                           </button>
                         )}
+                        <button
+                          onClick={() => handleCancelEnRoute(ev)}
+                          disabled={isBusy}
+                          style={{
+                            padding: "7px 16px",
+                            borderRadius: 8,
+                            border: "1px solid #cbd5e1",
+                            background: "#f8fafc",
+                            color: "#64748b",
+                            fontWeight: 600,
+                            fontSize: 13,
+                            cursor: "pointer",
+                          }}
+                        >
+                          Cancel En Route
+                        </button>
                       </>
                     )}
                     {showEngage && !isShowOverride && (

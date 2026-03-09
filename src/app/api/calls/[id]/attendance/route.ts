@@ -143,6 +143,14 @@ export async function POST(req: Request, ctx: any) {
     if (!existing?.time_out) payload.time_out = nowIso;
   }
 
+  if (action === "cancel_en_route") {
+    payload.on_my_way_at = null;
+    payload.current_lat = null;
+    payload.current_lng = null;
+    payload.location_updated_at = null;
+    payload.anticipated_arrival_at = null;
+  }
+
   if (action === "on_my_way") {
     // Always reset — member may be going en-route again after a prior checkout
     payload.on_my_way_at = nowIso;
