@@ -13,6 +13,7 @@ export default function NewCoursePage() {
     warning_days: "30",
     never_expires: false,
     show_on_roster: false,
+    is_mandatory: false,
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -38,7 +39,7 @@ export default function NewCoursePage() {
       const res = await fetch("/api/courses", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, name, never_expires, show_on_roster: form.show_on_roster, valid_months, warning_days }),
+        body: JSON.stringify({ code, name, never_expires, show_on_roster: form.show_on_roster, is_mandatory: form.is_mandatory, valid_months, warning_days }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(json?.error ?? "Create failed"); return; }
@@ -87,6 +88,16 @@ export default function NewCoursePage() {
           />
           <strong>Show on roster</strong>
           <span style={{ opacity: 0.6 }}>(badge on member list)</span>
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={form.is_mandatory}
+            onChange={(e) => setForm({ ...form, is_mandatory: e.target.checked })}
+          />
+          <strong>Mandatory</strong>
+          <span style={{ opacity: 0.6 }}>(required for all members)</span>
         </label>
 
         <div>

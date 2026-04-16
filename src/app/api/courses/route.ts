@@ -25,6 +25,7 @@ export async function POST(req: Request) {
   const name = String(body.name ?? "").trim();
   const never_expires = !!body.never_expires;
   const show_on_roster = !!body.show_on_roster;
+  const is_mandatory = !!body.is_mandatory;
 
   if (!code || !name) {
     return NextResponse.json({ error: "code and name are required" }, { status: 400 });
@@ -56,6 +57,7 @@ export async function POST(req: Request) {
     warning_days,
     never_expires,
     show_on_roster,
+    is_mandatory,
     is_active: body.is_active === false ? false : true,
   };
 

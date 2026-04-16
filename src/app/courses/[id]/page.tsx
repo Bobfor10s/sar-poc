@@ -13,6 +13,7 @@ type Course = {
   warning_days: number;
   never_expires: boolean;
   show_on_roster: boolean;
+  is_mandatory: boolean;
   is_active: boolean;
 };
 
@@ -24,6 +25,7 @@ type EditCourse = {
   warning_days: string;
   never_expires: boolean;
   show_on_roster: boolean;
+  is_mandatory: boolean;
   is_active: boolean;
 };
 
@@ -54,6 +56,7 @@ export default function CourseDetailPage() {
             warning_days: String(j.data.warning_days ?? 30),
             never_expires: !!j.data.never_expires,
             show_on_roster: !!j.data.show_on_roster,
+            is_mandatory: !!j.data.is_mandatory,
             is_active: !!j.data.is_active,
           });
         }
@@ -91,6 +94,7 @@ export default function CourseDetailPage() {
           valid_months,
           warning_days,
           show_on_roster: edit.show_on_roster,
+          is_mandatory: edit.is_mandatory,
           is_active: edit.is_active,
         }),
       });
@@ -105,6 +109,7 @@ export default function CourseDetailPage() {
         warning_days: String(json.data.warning_days ?? 30),
         never_expires: !!json.data.never_expires,
         show_on_roster: !!json.data.show_on_roster,
+        is_mandatory: !!json.data.is_mandatory,
         is_active: !!json.data.is_active,
       });
       setMsg("Saved.");
@@ -182,6 +187,12 @@ export default function CourseDetailPage() {
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
             <input type="checkbox" checked={edit.show_on_roster} onChange={(e) => setEdit({ ...edit, show_on_roster: e.target.checked })} />
             <strong>Show on roster</strong>
+          </label>
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+            <input type="checkbox" checked={edit.is_mandatory} onChange={(e) => setEdit({ ...edit, is_mandatory: e.target.checked })} />
+            <strong>Mandatory</strong>
+            <span style={{ opacity: 0.6 }}>(required for all members)</span>
           </label>
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
