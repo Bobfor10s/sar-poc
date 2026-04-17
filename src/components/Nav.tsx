@@ -44,6 +44,10 @@ export default function Nav() {
     { href: "/tasks", label: "Tasks", perm: "read_all" },
   ];
 
+  const reportLinks = [
+    { href: "/reports/courses", label: "Courses", perm: "read_all" },
+  ];
+
   const adminLinks = [
     { href: "/admin/approvals", label: "Approvals", perm: "approve_positions" },
     { href: "/admin/settings", label: "Settings", perm: "manage_members" },
@@ -54,6 +58,7 @@ export default function Nav() {
 
   const visibleGeneral = generalLinks.filter((l) => l.always || !l.perm || perms.has(l.perm));
   const visiblePositions = positionsLinks.filter((l) => !l.perm || perms.has(l.perm));
+  const visibleReports = reportLinks.filter((l) => !l.perm || perms.has(l.perm));
   const visibleAdmin = adminLinks.filter((l) => !l.perm || perms.has(l.perm));
 
   function navLink(href: string, label: string, indent = false) {
@@ -112,6 +117,18 @@ export default function Nav() {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {visiblePositions.map((l) => navLink(l.href, l.label, true))}
+          </div>
+        </div>
+      )}
+
+      {/* Reports section */}
+      {visibleReports.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase", padding: "4px 10px 6px" }}>
+            Reports
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            {visibleReports.map((l) => navLink(l.href, l.label, true))}
           </div>
         </div>
       )}
