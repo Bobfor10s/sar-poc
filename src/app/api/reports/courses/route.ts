@@ -65,7 +65,7 @@ export async function GET(req: Request) {
   if (memberId !== "all") {
     memberQuery = memberQuery.eq("id", memberId);
   }
-  const { data: members, error: mErr } = await memberQuery.order("name");
+  const { data: members, error: mErr } = await memberQuery.order("last_name").order("first_name");
   if (mErr) return NextResponse.json({ error: mErr.message }, { status: 500 });
   if (!members?.length) return NextResponse.json({ data: [] });
 
