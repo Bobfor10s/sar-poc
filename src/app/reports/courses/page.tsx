@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Member = { id: string; name: string };
+type Member = { id: string; first_name: string; last_name: string };
 type CourseOption = { id: string; code: string; name: string; is_mandatory: boolean };
 type ReportRow = {
   member_id: string;
@@ -77,7 +77,7 @@ export default function CourseReportPage() {
   useEffect(() => {
     fetch("/api/members")
       .then((r) => r.json())
-      .then((j) => setMembers((j.data ?? []).filter((m: Member & { is_active?: boolean }) => m.is_active !== false)));
+      .then((j) => setMembers((j.data ?? []).filter((m: Member & { is_active?: boolean; status?: string }) => m.status !== "inactive")));
     fetch("/api/courses")
       .then((r) => r.json())
       .then((j) => setCourses(j.data ?? []));
@@ -148,7 +148,7 @@ export default function CourseReportPage() {
           <select style={selectStyle} value={memberId} onChange={(e) => setMemberId(e.target.value)}>
             <option value="all">All Members</option>
             {members.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
+              <option key={m.id} value={m.id}>{m.first_name} {m.last_name}</option>
             ))}
           </select>
         </div>

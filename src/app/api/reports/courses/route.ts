@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/supabase/require-permission";
 
 type CertRow = { member_id: string; course_id: string; completed_at: string | null; expires_at: string | null };
 type CourseRow = { id: string; code: string; name: string; is_mandatory: boolean; never_expires: boolean; warning_days: number };
-type MemberRow = { id: string; name: string };
+type MemberRow = { id: string; first_name: string; last_name: string };
 
 function calcStatus(
   never_expires: boolean,
@@ -60,8 +60,8 @@ export async function GET(req: Request) {
   // 2. Fetch members
   let memberQuery = supabaseDb
     .from("members")
-    .select("id,name")
-    .eq("is_active", true);
+    .select("id,first_name,last_name")
+    .eq("status", "active");
   if (memberId !== "all") {
     memberQuery = memberQuery.eq("id", memberId);
   }
@@ -98,7 +98,7 @@ export async function GET(req: Request) {
 
       rows.push({
         member_id: member.id,
-        member_name: member.name,
+        member_name: `${member.first_name} ${member.last_name}`.trim(),
         course_id: course.id,
         course_code: course.code,
         course_name: course.name,
