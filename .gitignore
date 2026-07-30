@@ -53,3 +53,9 @@ sar-poc@*
 /next
 /npm
 .vercel
+
+# local scratch / working files
+.claude/
+/commits.txt
+/project_time.py
+/SAR_App_vs_Spreadsheet.docx
