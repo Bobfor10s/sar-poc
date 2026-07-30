@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 import { supabaseDb } from "@/lib/supabase/db";
-import { getAuthContext } from "@/lib/supabase/auth";
-
-const ALLOWED_EMAIL = "bob@wilsonclan.net";
+import { requirePermission } from "@/lib/supabase/require-permission";
 
 export async function GET(req: Request) {
-  const auth = await getAuthContext();
-  if (!auth || auth.member.email !== ALLOWED_EMAIL) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const check = await requirePermission("manage_members");
+  if (!check.ok) return check.response;
 
   const url = new URL(req.url);
   const sessionId = url.searchParams.get("session_id")?.trim() ?? "";

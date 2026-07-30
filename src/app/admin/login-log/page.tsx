@@ -2,8 +2,6 @@
 
 import React, { useEffect, useState } from "react";
 
-const ALLOWED_EMAIL = "bob@wilsonclan.net";
-
 const ACTION_LABELS: Record<string, string> = {
   check_in: "Checked In",
   check_out: "Checked Out",
@@ -100,7 +98,7 @@ export default function LoginLogPage() {
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((json) => {
-        if (json?.user?.email !== ALLOWED_EMAIL) {
+        if (!json?.user?.permissions?.includes("manage_members")) {
           setAllowed(false);
           setLoading(false);
           return;
