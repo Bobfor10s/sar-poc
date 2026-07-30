@@ -74,20 +74,17 @@ export async function GET() {
   }
 
   // Also surface en-route members for active calls.
-  // Covers two cases:
-  //   1. First-time en-route: on_my_way_at set, time_in null
-  //   2. Re-engage after checkout: on_my_way_at set, time_out set, on_my_way_at > time_out
+  // En route: on_my_way_at set, time_in still null — matches the call detail
+  // page's isEnRoute check, so a member who already has a time_in (even from
+  // a prior arrive/clear cycle) is never re-flagged as en route by a stale
+  // on_my_way_at click.
   const enRoutePromises = activeCalls.map(async (c) => {
     const { data } = await supabaseDb
       .from("call_attendance")
       .select("member_id, time_in, time_out, on_my_way_at, anticipated_arrival_at, current_lat, current_lng")
       .eq("call_id", c.id)
       .not("on_my_way_at", "is", null);
-    const enRoute = (data ?? []).filter((r: any) => {
-      if (r.time_in && !r.time_out) return false; // currently on-site
-      if (r.time_out) return r.on_my_way_at > r.time_out; // re-engaging after checkout
-      return true; // no time_in yet
-    });
+    const enRoute = (data ?? []).filter((r: any) => !r.time_in);
     return {
       title: c.title ?? "Call",
       incident_lat: (c as any).incident_lat as number | null,
