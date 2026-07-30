@@ -43,7 +43,7 @@ export default function CallsPage() {
   const [calls, setCalls] = useState<CallRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [showArchived, setShowArchived] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [canManageCalls, setCanManageCalls] = useState(false);
 
   async function loadCalls() {
     setLoading(true);
@@ -57,7 +57,7 @@ export default function CallsPage() {
     loadCalls();
     fetch("/api/auth/me")
       .then((r) => r.json())
-      .then((json) => setIsAdmin(json?.user?.role === "admin"))
+      .then((json) => setCanManageCalls(!!json?.user?.permissions?.includes("manage_calls")))
       .catch(() => {});
   }, []);
 
@@ -73,7 +73,7 @@ export default function CallsPage() {
     <main style={{ padding: 24, fontFamily: "system-ui", maxWidth: 860 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Calls</h1>
-        {isAdmin && (
+        {canManageCalls && (
           <Link
             href="/calls/new"
             style={{
